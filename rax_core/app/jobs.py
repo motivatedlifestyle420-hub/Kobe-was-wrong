@@ -80,7 +80,7 @@ def enqueue(
 
     conn = get_conn(db_path)
     try:
-        conn.execute(
+        cur = conn.execute(
             """
             INSERT INTO jobs
                 (id, job_type, payload, state, max_attempts, run_at, created_at, updated_at)
@@ -90,8 +90,8 @@ def enqueue(
             (jid, job_type, json.dumps(payload), max_attempts, rat, now, now),
         )
         # Only log the event when we actually inserted (rowcount == 1).
-        # sqlite3 reports rowcount=0 for the DO NOTHING path.
-        if conn.execute("SELECT changes()").fetchone()[0] == 1:
+        # sqlite3 reports rowcount == 0 for the DO NOTHING path.
+        if cur.rowcount == 1:
             _append_event(conn, jid, "enqueued", payload=payload, now=now)
         conn.commit()
     except Exception:

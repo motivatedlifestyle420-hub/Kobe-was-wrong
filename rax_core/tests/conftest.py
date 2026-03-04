@@ -2,7 +2,7 @@
 pytest configuration for rax_core tests.
 
 The `db` fixture provides an isolated, initialised SQLite database for each
-test function.  The path is passed explicitly to every job operation so that
+test function. The path is passed explicitly to every job operation so that
 tests never touch the default database.
 """
 import os

@@ -125,7 +125,7 @@ class TestClaimNext:
     def test_oldest_run_at_claimed_first(self, db):
         now = time.time()
         id_early = jobs.enqueue("demo", {}, run_at=now - 10, db_path=db)
-        id_late  = jobs.enqueue("demo", {}, run_at=now - 5,  db_path=db)
+        id_late = jobs.enqueue("demo", {}, run_at=now - 5, db_path=db)
         job = _claim(db)
         assert job["id"] == id_early  # earliest run_at wins
 
