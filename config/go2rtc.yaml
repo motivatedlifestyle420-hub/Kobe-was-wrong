@@ -1,0 +1,56 @@
+# go2rtc configuration – Tapo NVR Stack
+#
+# This file maps each Tapo camera's RTSP streams to WebRTC / HLS outputs
+# consumed by Frigate and browser clients.
+#
+# Replace the placeholder values with your real camera credentials and IPs.
+# Credentials are read from environment variables at runtime:
+#   CAMERA_USER     – Tapo RTSP username  (default: admin)
+#   CAMERA_PASSWORD – Tapo RTSP password
+#
+# Tapo stream URLs (standard firmware):
+#   Main stream (1080p/4K): rtsp://<user>:<pass>@<ip>/stream1
+#   Sub stream  (360p):     rtsp://<user>:<pass>@<ip>/stream2
+
+api:
+  listen: ":1984"         # go2rtc web UI / REST API
+  origin: "*"             # allow browser cross-origin WebRTC signalling
+
+rtsp:
+  listen: ":8554"         # internal RTSP re-stream (consumed by Frigate)
+
+webrtc:
+  listen: ":8555/tcp"     # WebRTC ICE TCP fallback
+  candidates:
+    - stun:8555            # STUN for direct browser connections
+
+streams:
+
+  # ── Camera 1 – Front Door ─────────────────────────────────────────────────
+  front_door:
+    - rtsp://{CAMERA_USER}:{CAMERA_PASSWORD}@{CAM1_IP}/stream1#backchannel=0
+  front_door_sub:
+    - rtsp://{CAMERA_USER}:{CAMERA_PASSWORD}@{CAM1_IP}/stream2#backchannel=0
+
+  # ── Camera 2 – Back Yard ──────────────────────────────────────────────────
+  back_yard:
+    - rtsp://{CAMERA_USER}:{CAMERA_PASSWORD}@{CAM2_IP}/stream1#backchannel=0
+  back_yard_sub:
+    - rtsp://{CAMERA_USER}:{CAMERA_PASSWORD}@{CAM2_IP}/stream2#backchannel=0
+
+  # ── Camera 3 – Driveway ───────────────────────────────────────────────────
+  driveway:
+    - rtsp://{CAMERA_USER}:{CAMERA_PASSWORD}@{CAM3_IP}/stream1#backchannel=0
+  driveway_sub:
+    - rtsp://{CAMERA_USER}:{CAMERA_PASSWORD}@{CAM3_IP}/stream2#backchannel=0
+
+  # ── Camera 4 – Garage ─────────────────────────────────────────────────────
+  garage:
+    - rtsp://{CAMERA_USER}:{CAMERA_PASSWORD}@{CAM4_IP}/stream1#backchannel=0
+  garage_sub:
+    - rtsp://{CAMERA_USER}:{CAMERA_PASSWORD}@{CAM4_IP}/stream2#backchannel=0
+
+  # Add more cameras by duplicating a block above.
+
+log:
+  level: warn               # debug | info | warn | error

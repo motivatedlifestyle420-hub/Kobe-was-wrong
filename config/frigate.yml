@@ -1,0 +1,240 @@
+# Frigate NVR configuration – Tapo NVR Stack
+#
+# Full reference: https://docs.frigate.video/configuration/
+#
+# Streams come from go2rtc (RTSP re-stream on localhost:8554).
+# Replace placeholder IPs, zones, and recording preferences below.
+
+mqtt:
+  enabled: true
+  host: mosquitto          # Docker service name resolves via internal DNS
+  port: 1883
+  topic_prefix: frigate
+  client_id: frigate
+  # user: mqtt_user        # uncomment if you add auth to mosquitto.conf
+  # password: mqtt_pass
+
+# ── Detectors ────────────────────────────────────────────────────────────────
+# Choose ONE detector block. CPU is the zero-config default.
+# Coral USB or GPU delivers ~5-10× faster inference.
+
+detectors:
+  # ── CPU (default, no extra hardware needed) ─────────────────────────────
+  cpu1:
+    type: cpu
+    num_threads: 3
+
+  # ── Google Coral USB (uncomment + comment out cpu1) ──────────────────────
+  # coral:
+  #   type: edgetpu
+  #   device: usb
+
+  # ── NVIDIA GPU / Jetson (uncomment + comment out cpu1) ───────────────────
+  # tensorrt:
+  #   type: tensorrt
+  #   device: 0
+
+# ── Model (default YOLOv8n bundled with Frigate) ─────────────────────────────
+model:
+  width: 320
+  height: 320
+
+# ── Global camera defaults ───────────────────────────────────────────────────
+camera_groups:
+  all_cameras:
+    icon: camera
+    cameras:
+      - front_door
+      - back_yard
+      - driveway
+      - garage
+
+# ── Global object detection defaults ─────────────────────────────────────────
+objects:
+  track:
+    - person
+    - car
+    - dog
+    - cat
+  filters:
+    person:
+      min_area: 5000        # ignore tiny false-positive blobs
+      max_area: 100000
+      min_score: 0.5
+      threshold: 0.7
+    car:
+      min_area: 10000
+      min_score: 0.5
+      threshold: 0.7
+
+# ── Global recording defaults ─────────────────────────────────────────────────
+record:
+  enabled: true
+  retain:
+    days: 7                 # keep continuous footage for 7 days
+    mode: motion            # only keep segments with motion (saves disk)
+  events:
+    retain:
+      default: 30           # keep event clips for 30 days
+      mode: active_objects
+
+# ── Global snapshot defaults ─────────────────────────────────────────────────
+snapshots:
+  enabled: true
+  timestamp: true
+  bounding_box: true
+  retain:
+    default: 30             # days
+
+# ── Motion detection defaults ─────────────────────────────────────────────────
+motion:
+  threshold: 30
+  lightning_threshold: 0.8  # suppress false detections during lightning
+
+# ── Cameras ──────────────────────────────────────────────────────────────────
+# go2rtc re-streams are available at rtsp://go2rtc:8554/<stream_name>
+
+cameras:
+
+  front_door:
+    enabled: true
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/front_door
+          roles:
+            - record
+        - path: rtsp://go2rtc:8554/front_door_sub
+          roles:
+            - detect
+      output_args:
+        record: preset-record-generic-audio-copy
+    detect:
+      enabled: true
+      width: 640
+      height: 360
+      fps: 5
+    zones:
+      doorstep:
+        coordinates: 0.25,0.75,0.75,0.75,0.75,1.0,0.25,1.0   # bottom quarter
+        objects:
+          - person
+      driveway_view:
+        coordinates: 0.0,0.0,1.0,0.0,1.0,0.5,0.0,0.5          # top half
+        objects:
+          - car
+    objects:
+      filters:
+        person:
+          required_zones:
+            - doorstep
+    snapshots:
+      enabled: true
+      required_zones:
+        - doorstep
+    record:
+      enabled: true
+    motion:
+      mask:
+        - 0,0,0.1,0,0.1,0.15,0,0.15   # mask out timestamp overlay (top-left)
+
+  back_yard:
+    enabled: true
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/back_yard
+          roles:
+            - record
+        - path: rtsp://go2rtc:8554/back_yard_sub
+          roles:
+            - detect
+      output_args:
+        record: preset-record-generic-audio-copy
+    detect:
+      enabled: true
+      width: 640
+      height: 360
+      fps: 5
+    zones:
+      yard:
+        coordinates: 0.1,0.2,0.9,0.2,0.9,0.9,0.1,0.9
+        objects:
+          - person
+          - dog
+          - cat
+    motion:
+      mask:
+        - 0,0,0.1,0,0.1,0.15,0,0.15
+
+  driveway:
+    enabled: true
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/driveway
+          roles:
+            - record
+        - path: rtsp://go2rtc:8554/driveway_sub
+          roles:
+            - detect
+      output_args:
+        record: preset-record-generic-audio-copy
+    detect:
+      enabled: true
+      width: 640
+      height: 360
+      fps: 5
+    zones:
+      driveway_zone:
+        coordinates: 0.0,0.3,1.0,0.3,1.0,1.0,0.0,1.0
+        objects:
+          - person
+          - car
+    motion:
+      mask:
+        - 0,0,0.1,0,0.1,0.15,0,0.15
+
+  garage:
+    enabled: true
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/garage
+          roles:
+            - record
+        - path: rtsp://go2rtc:8554/garage_sub
+          roles:
+            - detect
+      output_args:
+        record: preset-record-generic-audio-copy
+    detect:
+      enabled: true
+      width: 640
+      height: 360
+      fps: 5
+    zones:
+      garage_entrance:
+        coordinates: 0.2,0.4,0.8,0.4,0.8,1.0,0.2,1.0
+        objects:
+          - person
+          - car
+    motion:
+      mask:
+        - 0,0,0.1,0,0.1,0.15,0,0.15
+
+# ── Alerts / notifications via MQTT ──────────────────────────────────────────
+# Frigate publishes every detection event to:
+#   frigate/events          – full event JSON
+#   frigate/<camera>/person – filtered by object type
+#
+# Wire up Home Assistant, Node-RED, or ntfy to the MQTT broker to send
+# push notifications.  See README.md for examples.
+
+# ── Health monitoring ─────────────────────────────────────────────────────────
+# Frigate marks cameras "offline" when FFmpeg loses the stream and publishes:
+#   frigate/<camera>/recordings/state  →  "offline" / "online"
+# Subscribe in Home Assistant / Node-RED to trigger "camera offline" alerts.
+
+# ── Storage ───────────────────────────────────────────────────────────────────
+# Media is stored in the Docker volume `frigate_media` → /media/frigate
+# Layout:
+#   /media/frigate/recordings/<camera>/<YYYY-MM>/<DD>/<HH>/<MM.SS.mp4>
+#   /media/frigate/clips/<camera>-<timestamp>-<label>.mp4
+#   /media/frigate/snapshots/<camera>-<timestamp>-<label>.jpg

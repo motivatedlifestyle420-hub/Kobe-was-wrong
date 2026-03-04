@@ -1,0 +1,15 @@
+# Credentials – never commit the live .env file
+.env
+
+# Frigate media / database (large binary data)
+frigate_media/
+media/
+
+# Docker Compose override files
+docker-compose.override.yml
+
+# Editor / OS artefacts
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

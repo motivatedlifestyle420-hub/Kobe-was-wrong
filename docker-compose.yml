@@ -1,0 +1,101 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tapo NVR Stack  –  go2rtc + Frigate + Mosquitto
+#
+# Streams:  Tapo cams (RTSP)  →  go2rtc (WebRTC/HLS)  →  Frigate (AI + NVR)
+#           Frigate events  →  Mosquitto (MQTT)  →  notifications / HA
+#
+# Quick start:
+#   1. Copy .env.example → .env and fill in camera credentials / IPs
+#   2. Edit config/frigate.yml  (camera IPs, zones, recording preferences)
+#   3. docker compose up -d
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── MQTT broker (Frigate publishes events here) ───────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"   # WebSocket (optional – Home Assistant / Node-RED)
+    volumes:
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+
+  # ── go2rtc – low-latency WebRTC / HLS relay ───────────────────────────────
+  go2rtc:
+    image: alexxit/go2rtc:latest
+    container_name: go2rtc
+    restart: unless-stopped
+    network_mode: host          # host networking gives the lowest latency
+    environment:
+      - TZ=${TZ:-America/New_York}
+    volumes:
+      - ./config/go2rtc.yaml:/config/go2rtc.yaml:ro
+    # Ports exposed via host networking (no explicit mapping needed):
+    #   1984  – go2rtc web UI + API
+    #   8554  – internal RTSP re-stream (consumed by Frigate)
+
+  # ── Frigate – AI NVR (detection + recording + event timeline) ────────────
+  frigate:
+    image: ghcr.io/blakeblackshear/frigate:stable
+    container_name: frigate
+    restart: unless-stopped
+    privileged: true            # needed for hardware acceleration access
+    shm_size: "256mb"           # shared memory for frame buffers
+    depends_on:
+      - mosquitto
+      - go2rtc
+    extra_hosts:
+      # go2rtc uses host networking so its RTSP port (8554) is on the host.
+      # This alias lets Frigate reach rtsp://go2rtc:8554/... correctly.
+      - "go2rtc:host-gateway"
+    ports:
+      - "5000:5000"             # Frigate web UI
+      - "8971:8971"             # Frigate web UI (TLS, optional)
+      - "1935:1935"             # RTMP (optional re-stream output)
+    environment:
+      - TZ=${TZ:-America/New_York}
+      - FRIGATE_RTSP_PASSWORD=${CAMERA_PASSWORD}
+    volumes:
+      - ./config/frigate.yml:/config/config.yml:ro
+      - frigate_media:/media/frigate
+      - /etc/localtime:/etc/localtime:ro
+      # Uncomment ONE of the accelerator options below:
+      # ── Google Coral USB ──
+      # - /dev/bus/usb:/dev/bus/usb
+      # ── Raspberry Pi GPU ──
+      # - /dev/dma_heap:/dev/dma_heap
+      # - /dev/video10:/dev/video10
+      # - /dev/video11:/dev/video11
+      # - /dev/video12:/dev/video12
+    devices:
+      # ── Coral USB (uncomment if attached) ──
+      # - /dev/bus/usb:/dev/bus/usb
+      # ── NVIDIA GPU (uncomment + add `runtime: nvidia` below) ──
+      # - /dev/nvidia0:/dev/nvidia0
+      []
+    # runtime: nvidia            # uncomment for NVIDIA GPU
+
+  # ── Dashboard (static command-center landing page) ────────────────────────
+  dashboard:
+    image: nginx:alpine
+    container_name: nvr-dashboard
+    restart: unless-stopped
+    depends_on:
+      - frigate
+      - go2rtc
+    ports:
+      - "8080:80"
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+  frigate_media:
