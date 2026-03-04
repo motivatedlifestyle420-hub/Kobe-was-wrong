@@ -14,8 +14,8 @@ import json
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
-from app import jobs as job_store
-from app.db import init_db
+from . import jobs as job_store
+from .db import init_db
 
 
 def _json_response(handler: BaseHTTPRequestHandler, status: int, body: object) -> None:

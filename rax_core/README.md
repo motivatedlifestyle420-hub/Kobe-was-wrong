@@ -22,14 +22,17 @@ Features (email scanning, supplier alerts, roster imports, etc.) are added
 rax_core/
 ├── app/
 │   ├── config.py    — all tunables (env-var overrides)
-│   ├── db.py        — SQLite bootstrap (WAL, FK, busy_timeout)
+│   ├── db.py        — SQLite bootstrap (WAL, FK, busy_timeout, job_events)
 │   ├── models.py    — Job dataclass + canonical state constants
-│   ├── jobs.py      — persistence layer (enqueue, claim, succeed, fail, …)
-│   ├── runner.py    — executor with heartbeat + exponential-backoff retry
+│   ├── jobs.py      — persistence layer (enqueue, claim, verify_ownership, succeed, fail, …)
+│   ├── runner.py    — executor with heartbeat + ownership guard + retry
 │   ├── router.py    — HTTP API (stdlib only, no framework)
 │   └── main.py      — entry point (server + runner together)
 ├── tests/
-│   └── test_jobs.py — state-machine unit tests
+│   ├── conftest.py         — shared fixtures (module isolation)
+│   ├── test_jobs.py        — state-machine unit tests (36 total)
+│   └── test_integration.py — end-to-end smoke tests (Runner + real DB)
+├── data/            — SQLite DB lives here (gitignored)
 ├── requirements.txt
 └── README.md
 ```
@@ -65,24 +68,30 @@ Additional guarantees:
 - **Idempotency key** — `UNIQUE` constraint prevents duplicate job insertion.
 - **Heartbeat renewal** — runner thread renews `heartbeat_at` every 10 s
   while a job is active.
-- **Ownership verification** — `worker_id` is checked before any state
-  transition; another process cannot steal or double-complete a job.
+- **Ownership verification** — `worker_id` + heartbeat freshness are checked
+  before any state transition AND before executing a handler, preventing
+  double-execution when a heartbeat stall causes another runner to reclaim
+  the job.
 - **Stale-job recovery** — `requeue_stale()` resets orphaned `running` jobs
   whose heartbeat has expired, so they can be reclaimed after a crash.
 - **Exponential backoff** — retry delay = `min(2 ** attempts, 60)` seconds.
 - **Dead-letter** — after `MAX_ATTEMPTS` failures the job becomes `dead`
   instead of looping forever.
+- **attempts ≥ 0** — enforced by `CHECK` constraint; cannot drift negative.
+- **Observability** — every state transition is appended to the
+  `job_events` table (append-only) with event type, worker, message, and
+  timestamp.  Never raises; never blocks the pipeline.
 
 ---
 
 ## Quick start
 
 ```bash
-cd rax_core
-pip install -r requirements.txt
+# From the repo root:
+pip install -r rax_core/requirements.txt
 
 # Run the API server + background runner (default port 8080):
-python -m app.main
+python -m rax_core.app.main
 
 # Enqueue a job:
 curl -s -X POST http://localhost:8080/jobs \
@@ -117,7 +126,7 @@ curl -s "http://localhost:8080/jobs?state=pending"
 ## Adding a job handler
 
 ```python
-from app.runner import Runner
+from rax_core.app.runner import Runner
 
 runner = Runner()
 
@@ -134,6 +143,6 @@ runner.start()   # blocks; use block=False for background thread
 ## Running tests
 
 ```bash
-cd rax_core
-python -m pytest tests/ -v
+# From the repo root:
+python -m pytest rax_core/tests/ -v
 ```

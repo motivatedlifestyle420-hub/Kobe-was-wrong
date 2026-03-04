@@ -2,29 +2,30 @@
 Job persistence layer for rax_core.
 
 Responsibilities:
-  - enqueue      : insert with idempotency key (UNIQUE constraint handles dedup)
-  - claim        : atomically move pending → running, record worker_id
-  - heartbeat    : renew heartbeat_at for a running job
-  - succeed      : mark running → succeeded (ownership verified)
-  - fail         : mark running → failed/dead with exponential backoff (ownership verified)
-  - get          : fetch a single job by id
-  - list_jobs    : list jobs optionally filtered by state
-  - requeue_stale: reclaim orphaned running jobs whose heartbeat has expired
+  - enqueue          : insert with idempotency key (UNIQUE constraint handles dedup)
+  - claim            : atomically move pending → running, record worker_id
+  - heartbeat        : renew heartbeat_at for a running job
+  - verify_ownership : confirm this worker still owns a running job (freshness check)
+  - succeed          : mark running → succeeded (ownership verified)
+  - fail             : mark running → failed/dead with exponential backoff (ownership verified)
+  - get              : fetch a single job by id
+  - list_jobs        : list jobs optionally filtered by state
+  - requeue_stale    : reclaim orphaned running jobs whose heartbeat has expired
 """
 import json
 import time
 import sqlite3
 from typing import Optional
 
-from app.config import (
+from .config import (
     WORKER_ID,
     MAX_ATTEMPTS,
     BACKOFF_BASE,
     BACKOFF_CAP,
     HEARTBEAT_TIMEOUT,
 )
-from app.db import get_conn
-from app.models import Job, PENDING, RUNNING, SUCCEEDED, FAILED, DEAD
+from .db import get_conn, log_event
+from .models import Job, PENDING, RUNNING, SUCCEEDED, FAILED, DEAD
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +96,37 @@ def claim(conn: sqlite3.Connection | None = None) -> Optional[Job]:
     if updated == 0:
         return None  # another worker claimed it first
     row = c.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
-    return Job.from_row(row) if row else None
+    if row is None:
+        return None
+    job = Job.from_row(row)
+    log_event(job.id, "claimed", worker_id=WORKER_ID, conn=c)
+    return job
+
+
+def verify_ownership(job_id: int, conn: sqlite3.Connection | None = None) -> bool:
+    """
+    Return True if this worker still owns the job:
+      - state is 'running'
+      - worker_id matches WORKER_ID
+      - heartbeat_at is within HEARTBEAT_TIMEOUT seconds of now
+
+    Call this right before executing a handler and right before writing
+    a terminal state (succeed/fail).  Guards against double-execution when
+    a heartbeat stall causes another runner to reclaim the job.
+    """
+    c = conn or get_conn()
+    threshold = time.time() - HEARTBEAT_TIMEOUT
+    row = c.execute(
+        """
+        SELECT 1 FROM jobs
+        WHERE id = ?
+          AND state = 'running'
+          AND worker_id = ?
+          AND heartbeat_at >= ?
+        """,
+        (job_id, WORKER_ID, threshold),
+    ).fetchone()
+    return row is not None
 
 
 def heartbeat(job_id: int, conn: sqlite3.Connection | None = None) -> bool:
@@ -127,6 +158,8 @@ def succeed(job_id: int, conn: sqlite3.Connection | None = None) -> bool:
         (now, job_id, WORKER_ID),
     ).rowcount
     c.commit()
+    if updated == 1:
+        log_event(job_id, "succeeded", worker_id=WORKER_ID, conn=c)
     return updated == 1
 
 
@@ -173,6 +206,8 @@ def fail(
         (new_state, attempts, error, run_after, now, job_id, WORKER_ID),
     ).rowcount
     c.commit()
+    if updated == 1:
+        log_event(job_id, new_state, worker_id=WORKER_ID, message=error or None, conn=c)
     return updated == 1
 
 

@@ -28,9 +28,9 @@ import threading
 import time
 from typing import Callable
 
-from app import jobs as job_store
-from app.config import HEARTBEAT_INTERVAL
-from app.db import get_conn, init_db
+from . import jobs as job_store
+from .config import HEARTBEAT_INTERVAL
+from .db import get_conn, init_db
 
 logger = logging.getLogger(__name__)
 
@@ -113,9 +113,21 @@ class Runner:
         hb_thread.start()
         try:
             payload = json.loads(job.payload)
+            # Guard 1: confirm we still own this job before executing.
+            if not job_store.verify_ownership(job.id):
+                logger.warning(
+                    "Ownership lost before executing job %d — skipping", job.id
+                )
+                return
             handler(payload)
-            job_store.succeed(job.id)
-            logger.info("Job %d succeeded (type=%s)", job.id, job.job_type)
+            # Guard 2: confirm we still own this job before writing succeeded.
+            if job_store.verify_ownership(job.id):
+                job_store.succeed(job.id)
+                logger.info("Job %d succeeded (type=%s)", job.id, job.job_type)
+            else:
+                logger.warning(
+                    "Ownership lost before completing job %d — skipping succeed", job.id
+                )
         except Exception as exc:
             logger.exception("Job %d failed (type=%s): %s", job.id, job.job_type, exc)
             job_store.fail(job.id, error=str(exc))

@@ -8,8 +8,11 @@ Covers:
   - fail with backoff (running → failed)
   - fail exhausted retries (running → dead)
   - ownership verification
+  - verify_ownership freshness guard
   - stale-job requeue
   - DB pragmas (WAL, FK, busy_timeout)
+  - attempts >= 0 CHECK constraint
+  - job_events append-only log
 """
 import json
 import sqlite3
@@ -19,8 +22,8 @@ import os
 
 import pytest
 
-# Allow `from app.xxx import` when running from rax_core/
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+# Add the repo root so `rax_core` is importable as a package.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # Use an in-memory DB for every test
 os.environ["RAX_DB_PATH"] = ":memory:"
@@ -31,16 +34,16 @@ os.environ["RAX_BACKOFF_CAP"] = "60"
 os.environ["RAX_HEARTBEAT_TIMEOUT"] = "5"
 
 import importlib
-import app.config as _cfg
+import rax_core.app.config as _cfg
 importlib.reload(_cfg)
 
-import app.db as db_module
+import rax_core.app.db as db_module
 importlib.reload(db_module)
 
-import app.jobs as jobs
+import rax_core.app.jobs as jobs
 importlib.reload(jobs)
 
-from app.models import PENDING, RUNNING, SUCCEEDED, FAILED, DEAD
+from rax_core.app.models import PENDING, RUNNING, SUCCEEDED, FAILED, DEAD
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +134,48 @@ class TestClaim:
         conn.commit()
         assert jobs.claim(conn) is None
 
+    def test_claim_logs_event(self, conn):
+        enq(conn)
+        job = jobs.claim(conn)
+        row = conn.execute(
+            "SELECT event FROM job_events WHERE job_id=?", (job.id,)
+        ).fetchone()
+        assert row is not None
+        assert row["event"] == "claimed"
+
+
+class TestVerifyOwnership:
+    def test_owner_passes(self, conn):
+        enq(conn)
+        job = jobs.claim(conn)
+        assert jobs.verify_ownership(job.id, conn) is True
+
+    def test_wrong_worker_fails(self, conn):
+        enq(conn)
+        job = jobs.claim(conn)
+        conn.execute(
+            "UPDATE jobs SET worker_id='other' WHERE id=?", (job.id,)
+        )
+        conn.commit()
+        assert jobs.verify_ownership(job.id, conn) is False
+
+    def test_stale_heartbeat_fails(self, conn):
+        enq(conn)
+        job = jobs.claim(conn)
+        # Push heartbeat far into the past (beyond HEARTBEAT_TIMEOUT=5s)
+        conn.execute(
+            "UPDATE jobs SET heartbeat_at=? WHERE id=?",
+            (time.time() - 999, job.id),
+        )
+        conn.commit()
+        assert jobs.verify_ownership(job.id, conn) is False
+
+    def test_not_running_state_fails(self, conn):
+        enq(conn)
+        job = jobs.claim(conn)
+        jobs.succeed(job.id, conn)
+        assert jobs.verify_ownership(job.id, conn) is False
+
 
 class TestSucceed:
     def test_running_to_succeeded(self, conn):
@@ -151,6 +196,18 @@ class TestSucceed:
         conn.commit()
         ok = jobs.succeed(job.id, conn)
         assert ok is False
+
+    def test_succeed_logs_event(self, conn):
+        enq(conn)
+        job = jobs.claim(conn)
+        jobs.succeed(job.id, conn)
+        rows = conn.execute(
+            "SELECT event FROM job_events WHERE job_id=? ORDER BY id",
+            (job.id,),
+        ).fetchall()
+        events = [r["event"] for r in rows]
+        assert "claimed" in events
+        assert "succeeded" in events
 
 
 class TestFail:
@@ -203,6 +260,27 @@ class TestFail:
         conn.commit()
         ok = jobs.fail(job.id, conn=conn)
         assert ok is False
+
+    def test_fail_logs_failed_event(self, conn):
+        enq(conn, max_attempts=3)
+        job = jobs.claim(conn)
+        jobs.fail(job.id, error="oops", conn=conn)
+        row = conn.execute(
+            "SELECT event, message FROM job_events WHERE job_id=? AND event='failed'",
+            (job.id,),
+        ).fetchone()
+        assert row is not None
+        assert row["message"] == "oops"
+
+    def test_fail_logs_dead_event(self, conn):
+        enq(conn, max_attempts=1)
+        job = jobs.claim(conn)
+        jobs.fail(job.id, conn=conn)
+        row = conn.execute(
+            "SELECT event FROM job_events WHERE job_id=? AND event='dead'",
+            (job.id,),
+        ).fetchone()
+        assert row is not None
 
 
 class TestHeartbeat:
@@ -289,3 +367,14 @@ class TestDBPragmas:
                    VALUES ('bad-state', 'x', '{}', 'bogus', 0, 3, 0, 0, 0)"""
             )
             conn.commit()
+
+    def test_negative_attempts_rejected_by_check_constraint(self, conn):
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                """INSERT INTO jobs
+                   (idempotency_key, job_type, payload, state, attempts,
+                    max_attempts, run_after, created_at, updated_at)
+                   VALUES ('neg-att', 'x', '{}', 'pending', -1, 3, 0, 0, 0)"""
+            )
+            conn.commit()
+

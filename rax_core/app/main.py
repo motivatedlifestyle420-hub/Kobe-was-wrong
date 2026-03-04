@@ -14,9 +14,9 @@ import logging
 import os
 from http.server import HTTPServer
 
-from app.db import init_db
-from app.router import make_app
-from app.runner import Runner
+from .db import init_db
+from .router import make_app
+from .runner import Runner
 
 logging.basicConfig(
     level=logging.INFO,

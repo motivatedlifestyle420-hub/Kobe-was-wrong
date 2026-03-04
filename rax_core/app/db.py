@@ -9,9 +9,12 @@ Every connection returned by get_conn() has:
 """
 import sqlite3
 import threading
-from app.config import DB_PATH, DB_BUSY_TIMEOUT_MS
+import time
+import logging
+from .config import DB_PATH, DB_BUSY_TIMEOUT_MS
 
 _local = threading.local()
+_log = logging.getLogger(__name__)
 
 
 def get_conn() -> sqlite3.Connection:
@@ -42,7 +45,8 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
             payload          TEXT    NOT NULL DEFAULT '{}',
             state            TEXT    NOT NULL DEFAULT 'pending'
                              CHECK(state IN ('pending','running','succeeded','failed','dead')),
-            attempts         INTEGER NOT NULL DEFAULT 0,
+            attempts         INTEGER NOT NULL DEFAULT 0
+                             CHECK(attempts >= 0),
             max_attempts     INTEGER NOT NULL DEFAULT 3,
             worker_id        TEXT,
             heartbeat_at     REAL,
@@ -53,5 +57,38 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_jobs_state_run_after
             ON jobs (state, run_after);
+
+        CREATE TABLE IF NOT EXISTS job_events (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id     INTEGER NOT NULL REFERENCES jobs(id),
+            event      TEXT    NOT NULL,
+            worker_id  TEXT,
+            message    TEXT,
+            created_at REAL    NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_job_events_job_id
+            ON job_events (job_id);
     """)
     c.commit()
+
+
+def log_event(
+    job_id: int,
+    event: str,
+    worker_id: str | None = None,
+    message: str | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> None:
+    """Append an event to job_events.  Fire-and-forget — never raises."""
+    try:
+        c = conn or get_conn()
+        c.execute(
+            """
+            INSERT INTO job_events (job_id, event, worker_id, message, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (job_id, event, worker_id, message, time.time()),
+        )
+        c.commit()
+    except Exception:
+        _log.debug("log_event failed silently", exc_info=True)

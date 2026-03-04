@@ -5,7 +5,9 @@ All tunables live here so every other module imports from one place.
 import os
 
 # Path to the SQLite database file.  Override with RAX_DB_PATH env var.
-DB_PATH: str = os.environ.get("RAX_DB_PATH", "rax_core.db")
+# Default resolves to rax_core/data/rax_core.db when run from the repo root
+# as: python -m rax_core.app.main
+DB_PATH: str = os.environ.get("RAX_DB_PATH", "data/rax_core.db")
 
 # SQLite busy-timeout in milliseconds.  How long to wait for a locked DB.
 DB_BUSY_TIMEOUT_MS: int = int(os.environ.get("RAX_DB_BUSY_TIMEOUT_MS", "5000"))
