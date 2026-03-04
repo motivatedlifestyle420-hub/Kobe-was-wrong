@@ -2,7 +2,7 @@
 #
 # Full reference: https://docs.frigate.video/configuration/
 #
-# Streams come from go2rtc (RTSP re-stream on localhost:8554).
+# Streams come from go2rtc (RTSP re-stream on go2rtc:8554 via Docker DNS).
 # Replace placeholder IPs, zones, and recording preferences below.
 
 mqtt:
@@ -11,8 +11,8 @@ mqtt:
   port: 1883
   topic_prefix: frigate
   client_id: frigate
-  # user: mqtt_user        # uncomment if you add auth to mosquitto.conf
-  # password: mqtt_pass
+  user: "${MQTT_USER}"
+  password: "${MQTT_PASSWORD}"
 
 # ── Detectors ────────────────────────────────────────────────────────────────
 # Choose ONE detector block. CPU is the zero-config default.

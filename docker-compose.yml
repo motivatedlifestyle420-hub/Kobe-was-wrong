@@ -19,27 +19,48 @@ services:
     image: eclipse-mosquitto:2
     container_name: mosquitto
     restart: unless-stopped
+    # Bind to localhost only – no external LAN/WAN exposure.
+    # Services on the Docker network reach Mosquitto via the service name
+    # (mosquitto:1883) without needing a host port at all.
+    # Expose 127.0.0.1 only so tools running on the same host (e.g. HA OS,
+    # MQTT Explorer) can connect, but nothing else on the LAN can.
     ports:
-      - "1883:1883"
-      - "9001:9001"   # WebSocket (optional – Home Assistant / Node-RED)
+      - "127.0.0.1:1883:1883"
+      - "127.0.0.1:9001:9001"  # WebSocket – Home Assistant / Node-RED (localhost only)
+    environment:
+      - MQTT_USER=${MQTT_USER}
+      - MQTT_PASSWORD=${MQTT_PASSWORD}
+    # Generate a hashed password file from env vars on every startup,
+    # then hand off to the real mosquitto process.
+    # Note: -c creates/replaces the file each time, so only one user
+    # (MQTT_USER) is supported via this method. To add more users, omit -c
+    # and mount a pre-generated passwd file instead.
+    entrypoint: >
+      sh -c "mosquitto_passwd -b -c /mosquitto/config/passwd
+             \"$$MQTT_USER\" \"$$MQTT_PASSWORD\"
+             && exec mosquitto -c /mosquitto/config/mosquitto.conf"
     volumes:
       - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
 
   # ── go2rtc – low-latency WebRTC / HLS relay ───────────────────────────────
+  # Bridge networking (NOT host): all services can resolve each other by name.
+  # Frigate reaches streams as rtsp://go2rtc:8554/<name> with no extra_hosts
+  # hacks.  Works on Linux, macOS, and Windows Docker Desktop identically.
   go2rtc:
     image: alexxit/go2rtc:latest
     container_name: go2rtc
     restart: unless-stopped
-    network_mode: host          # host networking gives the lowest latency
+    ports:
+      - "1984:1984"      # go2rtc web UI + REST API
+      - "8554:8554"      # RTSP re-stream (consumed by Frigate; also accessible from host)
+      - "8555:8555/tcp"  # WebRTC ICE TCP fallback
+      - "8555:8555/udp"  # WebRTC ICE UDP (primary – required for direct browser WebRTC)
     environment:
       - TZ=${TZ:-America/New_York}
     volumes:
       - ./config/go2rtc.yaml:/config/go2rtc.yaml:ro
-    # Ports exposed via host networking (no explicit mapping needed):
-    #   1984  – go2rtc web UI + API
-    #   8554  – internal RTSP re-stream (consumed by Frigate)
 
   # ── Frigate – AI NVR (detection + recording + event timeline) ────────────
   frigate:
@@ -51,10 +72,6 @@ services:
     depends_on:
       - mosquitto
       - go2rtc
-    extra_hosts:
-      # go2rtc uses host networking so its RTSP port (8554) is on the host.
-      # This alias lets Frigate reach rtsp://go2rtc:8554/... correctly.
-      - "go2rtc:host-gateway"
     ports:
       - "5000:5000"             # Frigate web UI
       - "8971:8971"             # Frigate web UI (TLS, optional)
@@ -62,6 +79,8 @@ services:
     environment:
       - TZ=${TZ:-America/New_York}
       - FRIGATE_RTSP_PASSWORD=${CAMERA_PASSWORD}
+      - MQTT_USER=${MQTT_USER}
+      - MQTT_PASSWORD=${MQTT_PASSWORD}
     volumes:
       - ./config/frigate.yml:/config/config.yml:ro
       - frigate_media:/media/frigate

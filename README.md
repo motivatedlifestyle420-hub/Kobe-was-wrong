@@ -37,7 +37,7 @@ Tapo cams (RTSP)
 ## Prerequisites
 
 - Docker + Docker Compose v2
-- A machine on the same LAN as your Tapo cameras (Linux recommended; works on Mac/Windows too)
+- A machine on the same LAN as your Tapo cameras (works on **Linux, macOS, and Windows Docker Desktop**)
 - Tapo cameras with RTSP enabled (see below)
 
 ### Enable RTSP on Tapo cameras
@@ -59,7 +59,8 @@ git clone <repo-url> && cd <repo-name>
 
 # 2. Create your .env file from the example
 cp .env.example .env
-# Edit .env: set TZ, CAMERA_USER, CAMERA_PASSWORD, CAM1_IP … CAM4_IP
+# Edit .env: set TZ, CAMERA_USER, CAMERA_PASSWORD, CAM1_IP … CAM4_IP,
+#            MQTT_USER, MQTT_PASSWORD
 
 # 3. Edit camera IPs in go2rtc config
 #    Replace {CAM1_IP}…{CAM4_IP} with your real IPs
@@ -84,7 +85,75 @@ open http://localhost:8080
 | **Dashboard** | http://localhost:8080 | Command-center landing page |
 | **Frigate UI** | http://localhost:5000 | AI events, clips, recording review |
 | **go2rtc UI** | http://localhost:1984 | Stream health, WebRTC test players |
-| **MQTT broker** | localhost:1883 | Subscribe with any MQTT client |
+| **MQTT broker** | 127.0.0.1:1883 | Localhost only; auth required |
+
+---
+
+## Verification checklist
+
+Run these in order after `docker compose up -d` to confirm everything is working.
+
+### Step 1 – All containers are up
+
+```bash
+docker compose ps
+# Expected: mosquitto, go2rtc, frigate, nvr-dashboard all "running"
+```
+
+### Step 2 – go2rtc is serving streams
+
+```bash
+# List streams and their source status
+curl http://localhost:1984/api/streams
+# Expected: JSON with each camera stream name and at least one producer
+```
+
+Open http://localhost:1984 in your browser → click a stream name → you should see a live WebRTC player.
+
+### Step 3 – Frigate can reach go2rtc
+
+```bash
+docker compose logs frigate | grep -i "rtsp\|go2rtc\|error"
+# Expected: no "connection refused" or "unable to connect" lines
+```
+
+Open http://localhost:5000 → **System** tab → all cameras should show a green FPS counter.
+
+### Step 4 – MQTT auth is working
+
+```bash
+# This should FAIL (no credentials) – proving anonymous access is off:
+mosquitto_sub -h 127.0.0.1 -t "frigate/#" -v
+# Expected: "Connection Refused: not authorised"
+
+# This should SUCCEED:
+mosquitto_sub -h 127.0.0.1 -u "$MQTT_USER" -P "$MQTT_PASSWORD" -t "frigate/#" -v
+# Expected: Frigate publishes heartbeat/state messages every ~30 s
+```
+
+### Step 5 – Detections are flowing
+
+Walk in front of a camera, then check:
+
+```bash
+mosquitto_sub -h 127.0.0.1 -u "$MQTT_USER" -P "$MQTT_PASSWORD" \
+  -t "frigate/events" -C 1
+# Expected: one JSON event with label "person" and your camera name
+```
+
+Open http://localhost:5000 → **Events** tab → you should see the clip.
+
+---
+
+## Networking notes
+
+All four services (`mosquitto`, `go2rtc`, `frigate`, `dashboard`) share the same Docker bridge network. They resolve each other by service name:
+
+- Frigate pulls streams from `rtsp://go2rtc:8554/<stream_name>` — no host-networking tricks needed
+- Frigate connects to MQTT at `mosquitto:1883`
+- The MQTT host port is bound to `127.0.0.1` so nothing outside the Docker host can reach it
+
+This setup works identically on **Linux**, **macOS**, and **Windows Docker Desktop**.
 
 ---
 
@@ -167,7 +236,7 @@ docker compose up -d frigate
 ### Home Assistant
 
 1. Add the [Frigate integration](https://github.com/blakeblackshear/frigate-hass-integration)
-2. Add the [MQTT integration](https://www.home-assistant.io/integrations/mqtt/) pointing at `localhost:1883`
+2. Add the [MQTT integration](https://www.home-assistant.io/integrations/mqtt/) pointing at `127.0.0.1:1883` with the credentials from your `.env`
 3. Create automations: `frigate/events` → mobile app push notification
 
 ---
@@ -203,8 +272,8 @@ curl http://localhost:1984/api/streams
 # Check Frigate stats (FPS, storage, detector)
 curl http://localhost:5000/api/stats | python3 -m json.tool
 
-# Subscribe to all Frigate MQTT events
-mosquitto_sub -h localhost -t "frigate/#" -v
+# Subscribe to all Frigate MQTT events (requires credentials)
+mosquitto_sub -h 127.0.0.1 -u "$MQTT_USER" -P "$MQTT_PASSWORD" -t "frigate/#" -v
 
 # Stop everything
 docker compose down
@@ -224,24 +293,27 @@ docker compose down -v
 | "Offline" camera badge | Camera lost network – check LAN; set a DHCP reservation for the camera IP |
 | High CPU usage | Enable Coral USB or GPU detector; reduce `fps` per camera in `frigate.yml` |
 | Disk full | Lower retention days in `frigate.yml`; use `mode: motion` for continuous recording |
+| MQTT "not authorised" | Confirm `MQTT_USER` / `MQTT_PASSWORD` match in `.env`; restart mosquitto |
+| Frigate can't reach go2rtc | Run `docker compose ps` – ensure go2rtc is running; check `docker compose logs go2rtc` |
 
 ---
 
 ## Architecture diagram
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                      Docker host (LAN)                  │
-│                                                         │
-│  Tapo C310/C320/C510 ──RTSP──▶ go2rtc ──RTSP──▶ Frigate│
-│                                    │              │     │
-│                                    │WebRTC        │MQTT │
-│                                    ▼              ▼     │
-│                               Browser       Mosquitto   │
-│                               (live feed)       │       │
-│                                    ▲        HA / ntfy   │
-│                                    │        (alerts)    │
-│                               Dashboard                 │
-│                               (port 8080)               │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                Docker bridge network (nvr)                  │
+│                                                             │
+│  Tapo C310/C320/C510 ──RTSP──▶ go2rtc ──RTSP──▶ Frigate    │
+│  (LAN 192.168.1.x)            :8554         │               │
+│                                    │        │ MQTT           │
+│                                    │WebRTC  ▼               │
+│                                    │   Mosquitto            │
+│                               ▼    │   (auth required,      │
+│                           Browser  │    127.0.0.1 only)     │
+│                           (live)   │                        │
+│                                    │    HA / ntfy           │
+│                               Dashboard  (alerts)           │
+│                               (port 8080)                   │
+└─────────────────────────────────────────────────────────────┘
 ```

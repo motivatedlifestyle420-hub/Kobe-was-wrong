@@ -21,6 +21,7 @@ rtsp:
 
 webrtc:
   listen: ":8555/tcp"     # WebRTC ICE TCP fallback
+  # UDP port 8555 is also exposed in docker-compose.yml for direct ICE connections.
   candidates:
     - stun:8555            # STUN for direct browser connections
 
