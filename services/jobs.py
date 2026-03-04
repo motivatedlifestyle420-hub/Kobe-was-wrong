@@ -45,33 +45,47 @@ def heartbeat(conn: sqlite3.Connection, job_id: str) -> None:
     conn.commit()
 
 
-def complete(conn: sqlite3.Connection, job_id: str) -> None:
-    """Mark a job as successfully completed and record the completion timestamp."""
-    conn.execute(
+def complete(conn: sqlite3.Connection, job_id: str, worker_id: str) -> bool:
+    """Mark a job succeeded only if this worker still owns it.
+
+    Returns True when the row was updated, False when ownership was lost
+    (another worker reclaimed the job or it was already terminal).
+    """
+    cur = conn.execute(
         """
         UPDATE jobs
            SET status  = 'succeeded',
                done_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
          WHERE id = ?
+           AND worker_id = ?
+           AND status = 'leased'
         """,
-        (job_id,),
+        (job_id, worker_id),
     )
     conn.commit()
+    return cur.rowcount == 1
 
 
-def fail(conn: sqlite3.Connection, job_id: str, error: str) -> None:
-    """Mark a job as failed, recording the error message and failure timestamp."""
-    conn.execute(
+def fail(conn: sqlite3.Connection, job_id: str, error: str, worker_id: str) -> bool:
+    """Mark a job failed only if this worker still owns it.
+
+    Returns True when the row was updated, False when ownership was lost
+    (another worker reclaimed the job or it was already terminal).
+    """
+    cur = conn.execute(
         """
         UPDATE jobs
            SET status  = 'failed',
                done_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
                error   = ?
          WHERE id = ?
+           AND worker_id = ?
+           AND status = 'leased'
         """,
-        (error, job_id),
+        (error, job_id, worker_id),
     )
     conn.commit()
+    return cur.rowcount == 1
 
 
 def get(conn: sqlite3.Connection, job_id: str) -> Optional[sqlite3.Row]:

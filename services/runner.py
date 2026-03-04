@@ -21,10 +21,12 @@ def _loop(connect: Callable, stop: threading.Event) -> None:
                 continue
             try:
                 dispatch(conn, job)
-                job_store.complete(conn, job["id"])
+                if not job_store.complete(conn, job["id"], worker_id):
+                    logger.warning("Job %s: lost ownership, skipping complete", job["id"])
             except Exception as exc:
                 logger.exception("Job %s failed: %s", job["id"], exc)
-                job_store.fail(conn, job["id"], str(exc))
+                if not job_store.fail(conn, job["id"], str(exc), worker_id):
+                    logger.warning("Job %s: lost ownership, skipping fail", job["id"])
     finally:
         conn.close()
 
