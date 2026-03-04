@@ -1,0 +1,6 @@
+# rax_core Python dependencies
+# Standard library only — no third-party packages required for the core engine.
+# Add project-specific deps below as the kernel expands.
+
+# Testing
+pytest>=8.0
