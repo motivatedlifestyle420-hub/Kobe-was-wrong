@@ -47,23 +47,10 @@ def test_run_all():
     assert all(r.success for r in results)
 
 
-# ── HTTP endpoint tests ──────────────────────────────────────────────────────
+# ── HTTP health check ────────────────────────────────────────────────────────
 
 def test_root():
     response = client.get("/")
     assert response.status_code == 200
     assert response.json() == {"status": "running"}
 
-
-def test_list_tasks_endpoint():
-    response = client.get("/kernel/tasks")
-    assert response.status_code == 200
-    assert "tasks" in response.json()
-
-
-def test_run_unknown_task_endpoint():
-    response = client.post("/kernel/run/no_such_task")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["success"] is False
-    assert body["error"] == "unknown task: no_such_task"

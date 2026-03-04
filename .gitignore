@@ -24,3 +24,6 @@ build/
 
 # MyPy
 .mypy_cache/
+
+# SQLite database files
+data/
