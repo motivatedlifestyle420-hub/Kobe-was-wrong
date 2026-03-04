@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     type        TEXT    NOT NULL,
     payload     TEXT    NOT NULL DEFAULT '{}',
     status      TEXT    NOT NULL DEFAULT 'pending'
-                        CHECK(status IN ('pending','leased','done','failed')),
+                        CHECK(status IN ('pending','leased','succeeded','failed')),
     created_at  TEXT    NOT NULL
                         DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     leased_at   TEXT,

@@ -50,7 +50,7 @@ def complete(conn: sqlite3.Connection, job_id: str) -> None:
     conn.execute(
         """
         UPDATE jobs
-           SET status  = 'done',
+           SET status  = 'succeeded',
                done_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
          WHERE id = ?
         """,
