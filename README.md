@@ -1,6 +1,8 @@
 # Automation Command Center
 
-A personal automation platform.
+A local-first automation kernel. Minimal surface area. Maximum control.
+
+> See [SPINE.md](SPINE.md) for exact hardware requirements, stack, first milestone, and build plan.
 
 ## Structure
 
