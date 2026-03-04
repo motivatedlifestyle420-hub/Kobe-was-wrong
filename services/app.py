@@ -11,7 +11,7 @@ from . import jobs as job_store
 from . import runner
 import services.handlers  # noqa: F401 – triggers handler registration
 
-_INDEX_PATH = pathlib.Path(__file__).parent.parent / "Index.html"
+_INDEX_PATH = pathlib.Path(__file__).parent.parent / "index.html"
 _INDEX_HTML = _INDEX_PATH.read_text(encoding="utf-8")
 
 _runner_stop = None
@@ -35,6 +35,11 @@ app = FastAPI(lifespan=lifespan)
 class EnqueueRequest(BaseModel):
     type: str
     payload: dict = {}
+
+
+@app.get("/health")
+async def health():
+    return {"ok": True}
 
 
 @app.get("/", response_class=HTMLResponse)
