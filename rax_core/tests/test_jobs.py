@@ -3,13 +3,13 @@ Tests for the rax_core job state machine.
 
 Covers:
   - enqueue / idempotency
-  - claim (pending → running)
+  - claim (pending → running, atomic, with inline stale requeue)
   - succeed (running → succeeded)
-  - fail with backoff (running → failed)
+  - fail with backoff (running → pending for retry, or dead)
   - fail exhausted retries (running → dead)
   - ownership verification
   - verify_ownership freshness guard
-  - stale-job requeue
+  - stale-job requeue (IS NOT NULL guard)
   - DB pragmas (WAL, FK, busy_timeout)
   - attempts >= 0 CHECK constraint
   - job_events append-only log
@@ -143,6 +143,26 @@ class TestClaim:
         assert row is not None
         assert row["event"] == "claimed"
 
+    def test_claim_requeues_stale_inline(self, conn):
+        """claim() requeues stale running jobs before claiming the next pending job.
+
+        The stale job is the only claimable job in this test, so after the
+        inline requeue it should be immediately re-claimed (id and state check).
+        """
+        enq(conn, key="stale")
+        stale_job = jobs.claim(conn)
+        # Force the heartbeat far into the past so it looks stale.
+        conn.execute(
+            "UPDATE jobs SET heartbeat_at=? WHERE id=?",
+            (time.time() - 9999, stale_job.id),
+        )
+        conn.commit()
+        # claim() should inline-requeue the stale job, then immediately claim it.
+        claimed = jobs.claim(conn)
+        assert claimed is not None
+        assert claimed.id == stale_job.id   # same job, re-claimed after requeue
+        assert claimed.state == RUNNING
+
 
 class TestVerifyOwnership:
     def test_owner_passes(self, conn):
@@ -211,12 +231,13 @@ class TestSucceed:
 
 
 class TestFail:
-    def test_first_failure_goes_to_failed(self, conn):
+    def test_first_failure_requeues_as_pending(self, conn):
+        """A failed-but-retryable job must return to 'pending' so claim() picks it up."""
         enq(conn, max_attempts=3)
         job = jobs.claim(conn)
         jobs.fail(job.id, error="boom", conn=conn)
         refreshed = jobs.get(job.id, conn)
-        assert refreshed.state == FAILED
+        assert refreshed.state == PENDING
         assert refreshed.attempts == 1
         assert refreshed.error == "boom"
 
@@ -327,6 +348,22 @@ class TestRequeueStale:
         assert count == 0
         refreshed = jobs.get(job.id, conn)
         assert refreshed.state == RUNNING
+
+    def test_null_heartbeat_not_requeued(self, conn):
+        """A running job with NULL heartbeat_at must NOT be touched by requeue_stale.
+
+        SQLite evaluates NULL < threshold as NULL (falsy), so without the
+        IS NOT NULL guard the row is silently skipped.  With the guard the
+        behaviour is explicit and the row is still ignored (only rows with an
+        actual expired timestamp are requeued).
+        """
+        enq(conn)
+        job = jobs.claim(conn)
+        # Simulate a weird state: running but heartbeat_at is NULL.
+        conn.execute("UPDATE jobs SET heartbeat_at=NULL WHERE id=?", (job.id,))
+        conn.commit()
+        count = jobs.requeue_stale(conn)
+        assert count == 0  # IS NOT NULL guard prevents touching this row
 
 
 class TestListJobs:

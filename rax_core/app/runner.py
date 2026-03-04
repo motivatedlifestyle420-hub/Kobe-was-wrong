@@ -30,7 +30,7 @@ from typing import Callable
 
 from . import jobs as job_store
 from .config import HEARTBEAT_INTERVAL
-from .db import get_conn, init_db
+from .db import get_conn, init_db, close_conn
 
 logger = logging.getLogger(__name__)
 
@@ -81,27 +81,32 @@ class Runner:
     # ------------------------------------------------------------------
 
     def _run_loop(self) -> None:
-        last_stale_check = 0.0
-        while not self._stop_event.is_set():
-            now = time.time()
-            if now - last_stale_check >= _STALE_CHECK_INTERVAL:
-                recovered = job_store.requeue_stale()
-                if recovered:
-                    logger.info("Requeued %d stale job(s)", recovered)
-                last_stale_check = now
+        try:
+            last_stale_check = 0.0
+            while not self._stop_event.is_set():
+                now = time.time()
+                if now - last_stale_check >= _STALE_CHECK_INTERVAL:
+                    recovered = job_store.requeue_stale()
+                    if recovered:
+                        logger.info("Requeued %d stale job(s)", recovered)
+                    last_stale_check = now
 
-            job = job_store.claim()
-            if job is None:
-                time.sleep(_POLL_INTERVAL)
-                continue
+                job = job_store.claim()
+                if job is None:
+                    time.sleep(_POLL_INTERVAL)
+                    continue
 
-            handler = self._handlers.get(job.job_type)
-            if handler is None:
-                logger.error("No handler for job_type=%r (id=%d)", job.job_type, job.id)
-                job_store.fail(job.id, error=f"no handler for job_type={job.job_type!r}")
-                continue
+                handler = self._handlers.get(job.job_type)
+                if handler is None:
+                    logger.error("No handler for job_type=%r (id=%d)", job.job_type, job.id)
+                    job_store.fail(job.id, error=f"no handler for job_type={job.job_type!r}")
+                    continue
 
-            self._execute(job, handler)
+                self._execute(job, handler)
+        finally:
+            # Release the per-thread DB connection so SQLite file handles are
+            # not held open indefinitely after the worker thread exits.
+            close_conn()
 
     def _execute(self, job, handler: Callable[[dict], None]) -> None:
         stop_heartbeat = threading.Event()

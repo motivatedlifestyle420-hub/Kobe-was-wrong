@@ -72,6 +72,21 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
     c.commit()
 
 
+def close_conn() -> None:
+    """Close and discard the per-thread connection (if one is open).
+
+    Call this in a finally block when a worker thread exits so SQLite
+    file handles are released promptly instead of waiting for GC.
+    """
+    conn = getattr(_local, "conn", None)
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        _local.conn = None
+
+
 def log_event(
     job_id: int,
     event: str,

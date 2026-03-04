@@ -68,34 +68,51 @@ def enqueue(
 def claim(conn: sqlite3.Connection | None = None) -> Optional[Job]:
     """
     Atomically claim the oldest eligible pending job for this worker.
+
+    In a single transaction this function:
+      1. Requeues any running jobs whose heartbeat has expired (crash recovery).
+      2. Claims the next available pending job via UPDATE … RETURNING so that
+         no two workers can ever claim the same row.
+
     Returns the claimed Job or None if nothing is available.
     """
     c = conn or get_conn()
     now = time.time()
-    row = c.execute(
+    threshold = now - HEARTBEAT_TIMEOUT
+
+    # Step 1 — recover stale running jobs so they become claimable again.
+    # IS NOT NULL ensures jobs with NULL heartbeat_at (already requeued or
+    # never started) are not mistakenly touched by the NULL < threshold
+    # comparison (which evaluates to NULL/false in SQLite).
+    c.execute(
         """
-        SELECT * FROM jobs
-        WHERE state = 'pending' AND run_after <= ?
-        ORDER BY run_after ASC, id ASC
-        LIMIT 1
+        UPDATE jobs
+        SET state = 'pending', worker_id = NULL, heartbeat_at = NULL, updated_at = ?
+        WHERE state = 'running'
+          AND heartbeat_at IS NOT NULL
+          AND heartbeat_at < ?
         """,
-        (now,),
-    ).fetchone()
-    if row is None:
-        return None
-    job_id = row["id"]
-    updated = c.execute(
+        (now, threshold),
+    )
+
+    # Step 2 — atomic claim: single UPDATE with RETURNING avoids the
+    # SELECT-then-UPDATE race where two workers could SELECT the same row.
+    row = c.execute(
         """
         UPDATE jobs
         SET state = 'running', worker_id = ?, heartbeat_at = ?, updated_at = ?
-        WHERE id = ? AND state = 'pending'
+        WHERE id = (
+            SELECT id FROM jobs
+            WHERE state = 'pending' AND run_after <= ?
+            ORDER BY run_after ASC, id ASC
+            LIMIT 1
+        )
+        RETURNING *
         """,
-        (WORKER_ID, now, now, job_id),
-    ).rowcount
+        (WORKER_ID, now, now, now),
+    ).fetchone()
+
     c.commit()
-    if updated == 0:
-        return None  # another worker claimed it first
-    row = c.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     if row is None:
         return None
     job = Job.from_row(row)
@@ -172,8 +189,11 @@ def fail(
     Mark a running job as failed or dead.
     - Increments attempts.
     - If attempts >= max_attempts → state = 'dead'.
-    - Otherwise              → state = 'failed', schedules run_after with
-                               exponential backoff.
+    - Otherwise              → state = 'pending', schedules run_after with
+                               exponential backoff so claim() can pick it up
+                               again.  (claim() only picks pending rows, so
+                               retryable jobs must return to pending, not
+                               'failed', to actually be retried.)
     Verifies ownership before any change.
     """
     c = conn or get_conn()
@@ -192,7 +212,7 @@ def fail(
         new_state = DEAD
         run_after = now
     else:
-        new_state = FAILED
+        new_state = PENDING  # re-queue for retry; claim() will pick it up
         delay = min(BACKOFF_BASE ** attempts, BACKOFF_CAP)
         run_after = now + delay
 
@@ -200,14 +220,17 @@ def fail(
         """
         UPDATE jobs
         SET state = ?, attempts = ?, error = ?, run_after = ?,
-            worker_id = NULL, updated_at = ?
+            worker_id = NULL, heartbeat_at = NULL, updated_at = ?
         WHERE id = ? AND state = 'running' AND worker_id = ?
         """,
         (new_state, attempts, error, run_after, now, job_id, WORKER_ID),
     ).rowcount
     c.commit()
     if updated == 1:
-        log_event(job_id, new_state, worker_id=WORKER_ID, message=error or None, conn=c)
+        # Log the failure event regardless of whether the job will be retried
+        # or dead-lettered, so the event trail always records what happened.
+        event = DEAD if new_state == DEAD else FAILED
+        log_event(job_id, event, worker_id=WORKER_ID, message=error or None, conn=c)
     return updated == 1
 
 
@@ -222,7 +245,9 @@ def requeue_stale(conn: sqlite3.Connection | None = None) -> int:
         """
         UPDATE jobs
         SET state = 'pending', worker_id = NULL, heartbeat_at = NULL, updated_at = ?
-        WHERE state = 'running' AND heartbeat_at < ?
+        WHERE state = 'running'
+          AND heartbeat_at IS NOT NULL
+          AND heartbeat_at < ?
         """,
         (time.time(), threshold),
     ).rowcount
