@@ -3,7 +3,6 @@
 # go2rtc reads environment variables from the env_file declared in
 # docker-compose.yml, so ${CAM_USER} and ${CAM_PASS} are expanded at startup.
 #
-# Edit the camera IPs below (192.168.0.41–.48) to match your network.
 # Tapo standard RTSP port is 554; adjust if your firmware differs.
 #   Main stream (1080p/4K): /stream1
 #   Sub  stream (360p):     /stream2
@@ -22,29 +21,29 @@ webrtc:
 
 streams:
 
-  cam1_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.41:554/stream1
-  cam1_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.41:554/stream2
+  prep_main:       rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.188:554/stream1
+  prep_sub:        rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.188:554/stream2
 
-  cam2_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.42:554/stream1
-  cam2_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.42:554/stream2
+  front_door_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.178:554/stream1
+  front_door_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.178:554/stream2
 
-  cam3_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.43:554/stream1
-  cam3_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.43:554/stream2
+  home_main:       rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.170:554/stream1
+  home_sub:        rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.170:554/stream2
 
-  cam4_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.44:554/stream1
-  cam4_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.44:554/stream2
+  kitchen_main:    rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.156:554/stream1
+  kitchen_sub:     rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.156:554/stream2
 
-  cam5_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.45:554/stream1
-  cam5_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.45:554/stream2
+  office_main:     rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.205:554/stream1
+  office_sub:      rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.205:554/stream2
 
-  cam6_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.46:554/stream1
-  cam6_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.46:554/stream2
+  side_main:       rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.132:554/stream1
+  side_sub:        rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.132:554/stream2
 
-  cam7_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.47:554/stream1
-  cam7_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.47:554/stream2
+  shed_main:       rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.225:554/stream1
+  shed_sub:        rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.225:554/stream2
 
-  cam8_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.48:554/stream1
-  cam8_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.48:554/stream2
+  counter_main:    rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.201:554/stream1
+  counter_sub:     rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.201:554/stream2
 
 log:
   level: warn          # debug | info | warn | error

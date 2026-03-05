@@ -26,7 +26,7 @@ The 4 Tapo C425 battery cameras (no RTSP) remain managed separately in the Tapo 
 
 | Component | Count | Notes |
 |---|---|---|
-| RTSP cameras (Frigate) | 8 | cam1–cam8 in config |
+| RTSP cameras (Frigate) | 8 | prep, front_door, home, kitchen, office, side, shed, counter |
 | Battery cameras (Tapo app) | 4 | C425, cloud motion events only |
 | **Total cameras** | **12** | |
 
@@ -79,8 +79,8 @@ git clone <repo-url> && cd <repo-name>
 cp .env.example .env
 #    Set: CAM_USER, CAM_PASS, MQTT_USER, MQTT_PASSWORD
 
-# 3. Edit camera IPs in go2rtc config (replace 192.168.0.41–.48)
-nano config/go2rtc.yaml
+# 3. Camera IPs are already configured in config/go2rtc.yaml (192.168.50.x)
+#    Verify they match your network or edit if they've changed.
 
 # 4. Create required runtime directories and empty passwd file
 mkdir -p data/mosquitto data/mosquitto_log data/frigate media
@@ -131,7 +131,7 @@ open http://localhost:8080
 
 All four services (`mosquitto`, `go2rtc`, `frigate`, `dashboard`) share the same Docker bridge network:
 
-- **go2rtc uses bridge networking (NOT host)** — Frigate resolves streams via Docker DNS: `rtsp://go2rtc:8554/cam1_main`
+- **go2rtc uses bridge networking (NOT host)** — Frigate resolves streams via Docker DNS: `rtsp://go2rtc:8554/front_door_main`
 - **MQTT ports are bound to `127.0.0.1`** — broker is unreachable from the LAN; Docker-internal services connect via `mosquitto:1883`
 - Works identically on **Linux**, **macOS**, and **Windows Docker Desktop**
 
@@ -152,7 +152,7 @@ docker compose ps
 
 ```bash
 curl http://localhost:1984/api/streams
-# Expected: JSON listing cam1_main, cam1_sub … cam8_main, cam8_sub
+# Expected: JSON listing prep_main, prep_sub, front_door_main … counter_main, counter_sub
 ```
 
 Open http://localhost:1984 → click a stream → live WebRTC player should appear.
@@ -192,23 +192,40 @@ Open http://localhost:5000 → **Events** tab → clip should appear.
 
 ---
 
+## Camera inventory
+
+| Location | IP Address | MAC Address |
+|---|---|---|
+| Prep | 192.168.50.188 | 30-68-93-1D-7F-59 |
+| Front Door | 192.168.50.178 | 3C-64-CF-04-74-8F |
+| Home | 192.168.50.170 | 30-68-93-1D-6F-FF |
+| Kitchen | 192.168.50.156 | 30-68-93-1D-7A-99 |
+| Office | 192.168.50.205 | 7C-F1-7E-28-FC-FB |
+| Side | 192.168.50.132 | 3C-64-CF-C6-36-0E |
+| Shed | 192.168.50.225 | 7C-F1-7E-28-FD-46 |
+| Counter | 192.168.50.201 | 3C-64-CF-C6-49-34 |
+
+> **Set DHCP reservations** for each MAC address in your router so these IPs never change.
+
+---
+
 ## Adding / removing cameras
 
 1. Add streams in `config/go2rtc.yaml`:
    ```yaml
-   cam9_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.49:554/stream1
-   cam9_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.49:554/stream2
+   garage_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.xxx:554/stream1
+   garage_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.xxx:554/stream2
    ```
 
 2. Add a camera block in `config/frigate.yml`:
    ```yaml
-   cam9:
+   garage:
      ffmpeg:
        inputs:
-         - path: rtsp://go2rtc:8554/cam9_sub
+         - path: rtsp://go2rtc:8554/garage_sub
            input_args: preset-rtsp-restream
            roles: [detect]
-         - path: rtsp://go2rtc:8554/cam9_main
+         - path: rtsp://go2rtc:8554/garage_main
            input_args: preset-rtsp-restream
            roles: [record]
      detect: { width: 640, height: 360, fps: 5 }
@@ -216,7 +233,7 @@ Open http://localhost:5000 → **Events** tab → clip should appear.
 
 3. Add the camera to `dashboard/index.html`:
    ```js
-   { id: "cam9_main", frigateId: "cam9", label: "Camera 9" },
+   { id: "garage_main", frigateId: "garage", label: "Garage" },
    ```
 
 4. Restart:
