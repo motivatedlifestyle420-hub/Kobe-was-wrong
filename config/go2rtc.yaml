@@ -9,7 +9,7 @@
 
 api:
   listen: ":1984"      # go2rtc web UI / REST API
-  origin: "*"          # allow browser cross-origin WebRTC signalling
+  origin: "http://localhost:1984"  # restrict WebRTC signalling to local dashboard; adjust/extend as needed
 
 rtsp:
   listen: ":8554"      # RTSP re-stream consumed by Frigate
