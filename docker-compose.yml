@@ -1,0 +1,116 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tapo NVR Stack – go2rtc + Frigate + Mosquitto  (8 cameras)
+#
+# Streams:  8× Tapo RTSP cams  →  go2rtc  →  Frigate (AI + NVR)
+#           Frigate events      →  Mosquitto (MQTT)  →  notifications / HA
+#
+# Quick start:
+#   1. cp .env.example .env  and fill in CAM_USER, CAM_PASS, MQTT_USER, MQTT_PASSWORD
+#   2. Edit config/go2rtc.yaml – replace the 192.168.0.4x placeholders with real IPs
+#   3. mkdir -p data/mosquitto data/mosquitto_log data/frigate media
+#   4. touch config/mosquitto_passwd   ← prevents Docker creating it as a directory
+#   5. docker compose up -d
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── MQTT broker ─────────────────────────────────────────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    restart: unless-stopped
+    # Ports bound to 127.0.0.1: LAN cannot reach the broker directly.
+    # Docker-internal services connect via the service name (mosquitto:1883).
+    ports:
+      - "127.0.0.1:1883:1883"
+      - "127.0.0.1:9001:9001"  # WebSocket – localhost only
+    environment:
+      - MQTT_USER=${MQTT_USER}
+      - MQTT_PASSWORD=${MQTT_PASSWORD}
+    # Validate env vars, write hashed passwd file, then start broker.
+    # The passwd file is bind-mounted from ./config/mosquitto_passwd (host).
+    # Run `touch config/mosquitto_passwd` before first `docker compose up`
+    # so Docker binds it as a file, not a directory.
+    entrypoint: >
+      sh -c "
+        if [ -z \"$${MQTT_USER}\" ] || [ -z \"$${MQTT_PASSWORD}\" ]; then
+          echo 'ERROR: MQTT_USER / MQTT_PASSWORD not set'; exit 1;
+        fi;
+        mkdir -p /mosquitto/config /mosquitto/data /mosquitto/log;
+        touch /mosquitto/config/passwd;
+        mosquitto_passwd -b /mosquitto/config/passwd \"$${MQTT_USER}\" \"$${MQTT_PASSWORD}\";
+        exec /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf
+      "
+    volumes:
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./config/mosquitto_passwd:/mosquitto/config/passwd
+      - ./data/mosquitto:/mosquitto/data
+      - ./data/mosquitto_log:/mosquitto/log
+
+  # ── go2rtc – bridge networking (NOT host), works on Linux/macOS/Windows ────
+  # Frigate reaches streams as rtsp://go2rtc:8554/<name> via Docker DNS.
+  go2rtc:
+    image: alexxit/go2rtc:latest
+    container_name: go2rtc
+    restart: unless-stopped
+    ports:
+      - "1984:1984"      # go2rtc web UI + REST API
+      - "8554:8554"      # RTSP re-stream consumed by Frigate
+      - "8555:8555/tcp"  # WebRTC ICE TCP fallback
+      - "8555:8555/udp"  # WebRTC ICE UDP (primary)
+    volumes:
+      - ./config/go2rtc.yaml:/config/go2rtc.yaml:ro
+    # CAM_USER / CAM_PASS are expanded by go2rtc from env vars in go2rtc.yaml
+    env_file:
+      - .env
+
+  # ── Frigate – AI NVR ────────────────────────────────────────────────────────
+  frigate:
+    image: ghcr.io/blakeblackshear/frigate:stable
+    container_name: frigate
+    restart: unless-stopped
+    privileged: true       # needed for hardware acceleration access
+    shm_size: "512mb"      # 8 cameras need more shared memory for frame buffers
+    depends_on:
+      - mosquitto
+      - go2rtc
+    ports:
+      - "5000:5000"        # Frigate web UI
+      - "8971:8971"        # Frigate web UI (TLS, optional)
+    environment:
+      - MQTT_USER=${MQTT_USER}
+      - MQTT_PASSWORD=${MQTT_PASSWORD}
+    volumes:
+      - ./config/frigate.yml:/config/config.yml:ro
+      - ./data/frigate:/db
+      - ./media:/media/frigate
+      # Uncomment ONE hardware accelerator:
+      # ── Google Coral USB ──
+      # - /dev/bus/usb:/dev/bus/usb
+      # ── Raspberry Pi GPU ──
+      # - /dev/dma_heap:/dev/dma_heap
+      # - /dev/video10:/dev/video10
+      # - /dev/video11:/dev/video11
+      # - /dev/video12:/dev/video12
+    devices:
+      # ── Coral USB (uncomment if attached) ──
+      # - /dev/bus/usb:/dev/bus/usb
+      # ── NVIDIA GPU (uncomment + add `runtime: nvidia` below) ──
+      # - /dev/nvidia0:/dev/nvidia0
+      []
+    # runtime: nvidia      # uncomment for NVIDIA GPU
+
+  # ── Dashboard (static command-center landing page) ─────────────────────────
+  dashboard:
+    image: nginx:alpine
+    container_name: tapo_dashboard
+    restart: unless-stopped
+    depends_on:
+      - frigate
+      - go2rtc
+    ports:
+      - "8080:80"
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro

@@ -1,0 +1,141 @@
+# Frigate NVR configuration – Tapo NVR Stack (8 cameras)
+#
+# Full reference: https://docs.frigate.video/configuration/
+#
+# Detection uses substreams (*_sub via go2rtc:8554) for low CPU load.
+# Recording uses main streams (*_main via go2rtc:8554) for full quality.
+# Resource estimate: ~15–25% CPU, ~2–3 GB RAM, ~150–250 GB/week (motion).
+
+mqtt:
+  host: mosquitto
+  user: "${MQTT_USER}"
+  password: "${MQTT_PASSWORD}"
+  topic_prefix: frigate
+
+# ── Detectors ────────────────────────────────────────────────────────────────
+detectors:
+  cpu1:
+    type: cpu
+  # ── Google Coral USB (uncomment + comment out cpu1) ──────────────────────
+  # coral:
+  #   type: edgetpu
+  #   device: usb
+  # ── NVIDIA GPU / Jetson (uncomment + comment out cpu1) ───────────────────
+  # tensorrt:
+  #   type: tensorrt
+  #   device: 0
+
+# ── Global recording defaults ─────────────────────────────────────────────────
+record:
+  enabled: true
+  retain:
+    days: 7
+    mode: motion
+
+# ── Global snapshot defaults ─────────────────────────────────────────────────
+snapshots:
+  enabled: true
+  retain:
+    default: 14
+
+# ── Tracked objects ──────────────────────────────────────────────────────────
+objects:
+  track: [person, car, dog, cat]
+
+# ── FFmpeg output preset for recordings ──────────────────────────────────────
+ffmpeg:
+  output_args:
+    record: preset-record-generic-audio-copy
+
+# ── Cameras ──────────────────────────────────────────────────────────────────
+# Detect on the low-res substream; record in full quality from the main stream.
+
+cameras:
+
+  prep:
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/prep_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://go2rtc:8554/prep_main
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect: { width: 640, height: 360, fps: 5 }
+
+  front_door:
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/front_door_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://go2rtc:8554/front_door_main
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect: { width: 640, height: 360, fps: 5 }
+
+  home:
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/home_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://go2rtc:8554/home_main
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect: { width: 640, height: 360, fps: 5 }
+
+  kitchen:
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/kitchen_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://go2rtc:8554/kitchen_main
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect: { width: 640, height: 360, fps: 5 }
+
+  office:
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/office_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://go2rtc:8554/office_main
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect: { width: 640, height: 360, fps: 5 }
+
+  side:
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/side_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://go2rtc:8554/side_main
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect: { width: 640, height: 360, fps: 5 }
+
+  shed:
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/shed_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://go2rtc:8554/shed_main
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect: { width: 640, height: 360, fps: 5 }
+
+  counter:
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/counter_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://go2rtc:8554/counter_main
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect: { width: 640, height: 360, fps: 5 }

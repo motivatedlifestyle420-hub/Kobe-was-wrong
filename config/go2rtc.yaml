@@ -1,0 +1,49 @@
+# go2rtc configuration – Tapo NVR Stack (8 cameras)
+#
+# go2rtc reads environment variables from the env_file declared in
+# docker-compose.yml, so ${CAM_USER} and ${CAM_PASS} are expanded at startup.
+#
+# Tapo standard RTSP port is 554; adjust if your firmware differs.
+#   Main stream (1080p/4K): /stream1
+#   Sub  stream (360p):     /stream2
+
+api:
+  listen: ":1984"      # go2rtc web UI / REST API
+  origin: "http://localhost:1984"  # restrict WebRTC signalling to local dashboard; adjust/extend as needed
+
+rtsp:
+  listen: ":8554"      # RTSP re-stream consumed by Frigate
+
+webrtc:
+  listen: ":8555/tcp"  # WebRTC ICE TCP fallback; UDP 8555 also mapped in compose
+  candidates:
+    - stun:8555         # STUN for direct browser WebRTC connections
+
+streams:
+
+  prep_main:       rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.188:554/stream1
+  prep_sub:        rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.188:554/stream2
+
+  front_door_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.178:554/stream1
+  front_door_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.178:554/stream2
+
+  home_main:       rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.170:554/stream1
+  home_sub:        rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.170:554/stream2
+
+  kitchen_main:    rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.156:554/stream1
+  kitchen_sub:     rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.156:554/stream2
+
+  office_main:     rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.205:554/stream1
+  office_sub:      rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.205:554/stream2
+
+  side_main:       rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.132:554/stream1
+  side_sub:        rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.132:554/stream2
+
+  shed_main:       rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.225:554/stream1
+  shed_sub:        rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.225:554/stream2
+
+  counter_main:    rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.201:554/stream1
+  counter_sub:     rtsp://${CAM_USER}:${CAM_PASS}@192.168.50.201:554/stream2
+
+log:
+  level: warn          # debug | info | warn | error

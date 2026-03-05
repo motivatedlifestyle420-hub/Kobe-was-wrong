@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NVR Command Center</title>
+  <style>
+    :root {
+      --bg: #080d18;
+      --card: #0d1526;
+      --border: #1e2e52;
+      --text: #e2e8ff;
+      --muted: #7a90cc;
+      --accent: #3b82f6;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --red: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      background: #0a1020;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    .logo svg { color: var(--accent); }
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      margin-right: 5px;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    /* ── Main layout ─────────────────────────────────────────────────────── */
+    main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+    /* ── Camera grid ─────────────────────────────────────────────────────── */
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+    .cam-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+    .cam-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      position: relative;
+    }
+    .cam-feed {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #050a14;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      color: #2a3a60;
+      position: relative;
+    }
+    .cam-feed iframe {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    .cam-footer {
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid var(--border);
+    }
+    .cam-name { font-weight: 700; font-size: 14px; }
+    .cam-status {
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+    .cam-status.online  { background: #16302155; color: var(--green); border: 1px solid #16532155; }
+    .cam-status.offline { background: #3b000055; color: var(--red);   border: 1px solid #7f000055; }
+
+    /* ── Bottom panels ───────────────────────────────────────────────────── */
+    .panels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+    @media (max-width: 720px) { .panels { grid-template-columns: 1fr; } }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+    }
+    .panel h2 {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── Event timeline ──────────────────────────────────────────────────── */
+    .timeline { list-style: none; }
+    .timeline li {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .timeline li:last-child { border-bottom: none; }
+    .ev-icon {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+    .ev-icon.person  { background: #1e3a6e55; }
+    .ev-icon.car     { background: #3a2a0055; }
+    .ev-icon.pet     { background: #2a3a1555; }
+    .ev-time  { color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .ev-label { font-weight: 600; }
+    .ev-cam   { color: var(--muted); font-size: 12px; }
+
+    /* ── Quick links ─────────────────────────────────────────────────────── */
+    .links { display: flex; flex-direction: column; gap: 10px; }
+    .link-btn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: #0a1428;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .link-btn:hover { background: #0e1a38; border-color: var(--accent); }
+    .link-icon {
+      width: 34px; height: 34px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .link-desc { font-size: 12px; color: var(--muted); font-weight: 400; }
+
+    /* ── Health bar ──────────────────────────────────────────────────────── */
+    .health-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .health-item {
+      background: #0a1428;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 13px;
+    }
+    .health-label { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+    .health-val { font-weight: 700; font-size: 16px; }
+    .health-val.ok  { color: var(--green); }
+    .health-val.warn { color: var(--amber); }
+
+    /* ── Footer ──────────────────────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      padding: 16px;
+      font-size: 12px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">
+      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none"
+           viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M15 10l4.553-2.069A1 1 0 0121 8.854v6.292a1 1 0 01-1.447.894L15 14M3
+              8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+      </svg>
+      NVR Command Center
+    </div>
+    <div class="status-bar">
+      <span><span class="status-dot"></span>System Online</span>
+      <span id="clock">–</span>
+    </div>
+  </header>
+
+  <!-- ── Main ───────────────────────────────────────────────────────────── -->
+  <main>
+
+    <!-- Camera grid -->
+    <p class="section-title">Live Cameras</p>
+    <div class="cam-grid" id="camGrid">
+      <!-- Cards injected by JS -->
+    </div>
+
+    <!-- Bottom panels -->
+    <div class="panels">
+
+      <!-- Event timeline -->
+      <div class="panel">
+        <h2>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
+               viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Event Timeline
+        </h2>
+        <ul class="timeline" id="timeline">
+          <li><span style="color:var(--muted);font-size:13px">
+            Waiting for Frigate events via MQTT…
+          </span></li>
+        </ul>
+      </div>
+
+      <!-- Quick links + health -->
+      <div class="panel">
+        <h2>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
+               viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+          </svg>
+          Quick Links
+        </h2>
+        <div class="links">
+          <a class="link-btn" href="http://localhost:5000" target="_blank">
+            <div class="link-icon" style="background:#1a2a4a">📷</div>
+            <div>
+              <div>Frigate UI</div>
+              <div class="link-desc">AI events · clips · recordings · review</div>
+            </div>
+          </a>
+          <a class="link-btn" href="http://localhost:1984" target="_blank">
+            <div class="link-icon" style="background:#1a2a4a">📡</div>
+            <div>
+              <div>go2rtc</div>
+              <div class="link-desc">WebRTC streams · RTSP relay · stream health</div>
+            </div>
+          </a>
+          <a class="link-btn" href="http://localhost:8123" target="_blank">
+            <div class="link-icon" style="background:#1a3a2a">🏠</div>
+            <div>
+              <div>Home Assistant <span style="color:var(--muted);font-weight:400">(optional)</span></div>
+              <div class="link-desc">Push notifications · automations · dashboard</div>
+            </div>
+          </a>
+        </div>
+
+        <!-- Health metrics -->
+        <p class="section-title" style="margin-top:18px">System Health</p>
+        <div class="health-grid">
+          <div class="health-item">
+            <div class="health-label">Cameras Online</div>
+            <div class="health-val" id="hCamsOnline">— / —</div>
+          </div>
+          <div class="health-item">
+            <div class="health-label">Detection FPS</div>
+            <div class="health-val ok" id="hDetFps">—</div>
+          </div>
+          <div class="health-item">
+            <div class="health-label">Storage Used</div>
+            <div class="health-val" id="hStorage">—</div>
+          </div>
+          <div class="health-item">
+            <div class="health-label">Events Today</div>
+            <div class="health-val" id="hEventsToday">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer>
+    Tapo NVR Stack &nbsp;·&nbsp;
+    <a href="https://docs.frigate.video" target="_blank">Frigate docs</a> &nbsp;·&nbsp;
+    <a href="https://github.com/AlexxIT/go2rtc" target="_blank">go2rtc docs</a>
+  </footer>
+
+  <script>
+    // ── Configuration ──────────────────────────────────────────────────────
+    // go2rtc embeds live WebRTC players via its built-in iframe URL.
+    const GO2RTC = "http://localhost:1984";
+    const FRIGATE = "http://localhost:5000";
+
+    const CAMERAS = [
+      { id: "prep_main",       frigateId: "prep",       label: "Prep"       },
+      { id: "front_door_main", frigateId: "front_door", label: "Front Door" },
+      { id: "home_main",       frigateId: "home",       label: "Home"       },
+      { id: "kitchen_main",    frigateId: "kitchen",    label: "Kitchen"    },
+      { id: "office_main",     frigateId: "office",     label: "Office"     },
+      { id: "side_main",       frigateId: "side",       label: "Side"       },
+      { id: "shed_main",       frigateId: "shed",       label: "Shed"       },
+      { id: "counter_main",    frigateId: "counter",    label: "Counter"    },
+    ];
+
+    // ── Clock ──────────────────────────────────────────────────────────────
+    const clockEl = document.getElementById("clock");
+    function updateClock() {
+      clockEl.textContent = new Date().toLocaleTimeString();
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // ── Camera grid ────────────────────────────────────────────────────────
+    const grid = document.getElementById("camGrid");
+
+    CAMERAS.forEach(cam => {
+      const card = document.createElement("div");
+      card.className = "cam-card";
+      card.id = "cam-" + cam.id;
+
+      // go2rtc WebRTC embed URL
+      const streamUrl = `${GO2RTC}/stream.html?src=${cam.id}&mode=webrtc`;
+
+      card.innerHTML = `
+        <div class="cam-feed">
+          <iframe src="${streamUrl}" allow="autoplay" allowfullscreen></iframe>
+        </div>
+        <div class="cam-footer">
+          <span class="cam-name">${cam.label}</span>
+          <span class="cam-status online" id="status-${cam.id}">● Online</span>
+        </div>`;
+      grid.appendChild(card);
+    });
+
+    // ── Event timeline (populated via Frigate REST API polling) ───────────
+    // Frigate exposes: GET /api/events?limit=10
+    const timelineEl = document.getElementById("timeline");
+    const evCountEl  = document.getElementById("hEventsToday");
+    let eventsToday  = 0;
+
+    const ICONS = { person: "🚶", car: "🚗", dog: "🐕", cat: "🐈", default: "🎯" };
+    const TYPE_CLASS = { person: "person", car: "car", dog: "pet", cat: "pet" };
+
+    // Compute start-of-day once; refresh it at each midnight crossing.
+    let todayStartSec = getTodayStartSec();
+    function getTodayStartSec() {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      return Math.floor(d.getTime() / 1000);
+    }
+    function refreshTodayIfNeeded() {
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (nowSec >= todayStartSec + 86400) {
+        todayStartSec = getTodayStartSec();
+      }
+    }
+
+    function fetchEvents() {
+      refreshTodayIfNeeded();
+
+      fetch(`${FRIGATE}/api/events?limit=10&after=${todayStartSec}`)
+        .then(r => r.ok ? r.json() : [])
+        .then(events => {
+          if (!Array.isArray(events) || events.length === 0) return;
+          eventsToday = events.length;
+          evCountEl.textContent = eventsToday;
+
+          timelineEl.innerHTML = "";
+          events.forEach(ev => {
+            const label = ev.label || "object";
+            const cam   = ev.camera || "—";
+            const ts    = ev.start_time
+              ? new Date(ev.start_time * 1000).toLocaleTimeString()
+              : "—";
+            const icon   = ICONS[label]  || ICONS.default;
+            const cls    = TYPE_CLASS[label] || "person";
+
+            const li = document.createElement("li");
+            li.innerHTML = `
+              <div class="ev-icon ${cls}">${icon}</div>
+              <div>
+                <div class="ev-label">${label.charAt(0).toUpperCase() + label.slice(1)} detected</div>
+                <div class="ev-cam">${cam.replace(/_/g, " ")}</div>
+                <div class="ev-time">${ts}</div>
+              </div>`;
+            timelineEl.appendChild(li);
+          });
+        })
+        .catch(() => { /* Frigate not yet reachable – silent retry */ });
+    }
+
+    fetchEvents();
+    setInterval(fetchEvents, 15000);  // refresh every 15 s
+
+    // ── Health: poll Frigate /api/stats ────────────────────────────────────
+    const hDetFps  = document.getElementById("hDetFps");
+    const hStorage = document.getElementById("hStorage");
+
+    function fetchStats() {
+      fetch(`${FRIGATE}/api/stats`)
+        .then(r => r.ok ? r.json() : null)
+        .then(stats => {
+          if (!stats) return;
+
+          // Detection FPS (average across all cameras)
+          const detectors = Object.values(stats.detectors || {});
+          if (detectors.length) {
+            const avgFps = (detectors.reduce((a, d) => a + (d.detection_fps || 0), 0) / detectors.length).toFixed(1);
+            hDetFps.textContent = avgFps + " FPS";
+            hDetFps.className = "health-val " + (parseFloat(avgFps) > 0 ? "ok" : "warn");
+          }
+
+          // Storage
+          if (stats.service?.storage) {
+            const s = stats.service.storage;
+            const usedGb = ((s.used || 0) / 1e9).toFixed(1);
+            const totalGb = ((s.total || 0) / 1e9).toFixed(1);
+            hStorage.textContent = `${usedGb} / ${totalGb} GB`;
+            const pct = s.total > 0 ? (s.used / s.total) : 0;
+            hStorage.className = "health-val " + (pct > 0.9 ? "warn" : "ok");
+          }
+
+          // Camera online / offline count
+          const camStats = stats.cameras || {};
+          const total    = CAMERAS.length;
+          let online     = 0;
+          CAMERAS.forEach(cam => {
+            const cs = camStats[cam.frigateId || cam.id];
+            const isOnline = cs && (cs.camera_fps > 0 || cs.process_fps > 0);
+            if (isOnline) online++;
+            const el = document.getElementById("status-" + cam.id);
+            if (el) {
+              el.textContent = isOnline ? "● Online" : "● Offline";
+              el.className   = "cam-status " + (isOnline ? "online" : "offline");
+            }
+          });
+          const camsEl = document.getElementById("hCamsOnline");
+          camsEl.textContent = `${online} / ${total}`;
+          camsEl.className   = "health-val " + (online === total ? "ok" : "warn");
+        })
+        .catch(() => { /* silent – Frigate not yet reachable */ });
+    }
+
+    fetchStats();
+    setInterval(fetchStats, 10000);
+  </script>
+</body>
+</html>
