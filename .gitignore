@@ -1,9 +1,14 @@
 # Credentials – never commit the live .env file
 .env
 
-# Frigate media / database (large binary data)
-frigate_media/
+# Runtime data directories (created by docker compose)
+data/
 media/
+
+# Mosquitto password file – written by the container entrypoint at startup.
+# Create an empty placeholder before first run: touch config/mosquitto_passwd
+# Docker will then populate it with bcrypt-hashed credentials.
+config/mosquitto_passwd
 
 # Docker Compose override files
 docker-compose.override.yml

@@ -1,57 +1,50 @@
-# go2rtc configuration – Tapo NVR Stack
+# go2rtc configuration – Tapo NVR Stack (8 cameras)
 #
-# This file maps each Tapo camera's RTSP streams to WebRTC / HLS outputs
-# consumed by Frigate and browser clients.
+# go2rtc reads environment variables from the env_file declared in
+# docker-compose.yml, so ${CAM_USER} and ${CAM_PASS} are expanded at startup.
 #
-# Replace the placeholder values with your real camera credentials and IPs.
-# Credentials are read from environment variables at runtime:
-#   CAMERA_USER     – Tapo RTSP username  (default: admin)
-#   CAMERA_PASSWORD – Tapo RTSP password
-#
-# Tapo stream URLs (standard firmware):
-#   Main stream (1080p/4K): rtsp://<user>:<pass>@<ip>/stream1
-#   Sub stream  (360p):     rtsp://<user>:<pass>@<ip>/stream2
+# Edit the camera IPs below (192.168.0.41–.48) to match your network.
+# Tapo standard RTSP port is 554; adjust if your firmware differs.
+#   Main stream (1080p/4K): /stream1
+#   Sub  stream (360p):     /stream2
 
 api:
-  listen: ":1984"         # go2rtc web UI / REST API
-  origin: "*"             # allow browser cross-origin WebRTC signalling
+  listen: ":1984"      # go2rtc web UI / REST API
+  origin: "*"          # allow browser cross-origin WebRTC signalling
 
 rtsp:
-  listen: ":8554"         # internal RTSP re-stream (consumed by Frigate)
+  listen: ":8554"      # RTSP re-stream consumed by Frigate
 
 webrtc:
-  listen: ":8555/tcp"     # WebRTC ICE TCP fallback
-  # UDP port 8555 is also exposed in docker-compose.yml for direct ICE connections.
+  listen: ":8555/tcp"  # WebRTC ICE TCP fallback; UDP 8555 also mapped in compose
   candidates:
-    - stun:8555            # STUN for direct browser connections
+    - stun:8555         # STUN for direct browser WebRTC connections
 
 streams:
 
-  # ── Camera 1 – Front Door ─────────────────────────────────────────────────
-  front_door:
-    - rtsp://{CAMERA_USER}:{CAMERA_PASSWORD}@{CAM1_IP}/stream1#backchannel=0
-  front_door_sub:
-    - rtsp://{CAMERA_USER}:{CAMERA_PASSWORD}@{CAM1_IP}/stream2#backchannel=0
+  cam1_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.41:554/stream1
+  cam1_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.41:554/stream2
 
-  # ── Camera 2 – Back Yard ──────────────────────────────────────────────────
-  back_yard:
-    - rtsp://{CAMERA_USER}:{CAMERA_PASSWORD}@{CAM2_IP}/stream1#backchannel=0
-  back_yard_sub:
-    - rtsp://{CAMERA_USER}:{CAMERA_PASSWORD}@{CAM2_IP}/stream2#backchannel=0
+  cam2_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.42:554/stream1
+  cam2_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.42:554/stream2
 
-  # ── Camera 3 – Driveway ───────────────────────────────────────────────────
-  driveway:
-    - rtsp://{CAMERA_USER}:{CAMERA_PASSWORD}@{CAM3_IP}/stream1#backchannel=0
-  driveway_sub:
-    - rtsp://{CAMERA_USER}:{CAMERA_PASSWORD}@{CAM3_IP}/stream2#backchannel=0
+  cam3_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.43:554/stream1
+  cam3_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.43:554/stream2
 
-  # ── Camera 4 – Garage ─────────────────────────────────────────────────────
-  garage:
-    - rtsp://{CAMERA_USER}:{CAMERA_PASSWORD}@{CAM4_IP}/stream1#backchannel=0
-  garage_sub:
-    - rtsp://{CAMERA_USER}:{CAMERA_PASSWORD}@{CAM4_IP}/stream2#backchannel=0
+  cam4_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.44:554/stream1
+  cam4_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.44:554/stream2
 
-  # Add more cameras by duplicating a block above.
+  cam5_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.45:554/stream1
+  cam5_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.45:554/stream2
+
+  cam6_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.46:554/stream1
+  cam6_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.46:554/stream2
+
+  cam7_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.47:554/stream1
+  cam7_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.47:554/stream2
+
+  cam8_main: rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.48:554/stream1
+  cam8_sub:  rtsp://${CAM_USER}:${CAM_PASS}@192.168.0.48:554/stream2
 
 log:
-  level: warn               # debug | info | warn | error
+  level: warn          # debug | info | warn | error

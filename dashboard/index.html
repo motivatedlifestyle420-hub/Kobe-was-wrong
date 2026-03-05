@@ -350,10 +350,14 @@
     const FRIGATE = "http://localhost:5000";
 
     const CAMERAS = [
-      { id: "front_door",  label: "Front Door" },
-      { id: "back_yard",   label: "Back Yard"  },
-      { id: "driveway",    label: "Driveway"   },
-      { id: "garage",      label: "Garage"     },
+      { id: "cam1_main", frigateId: "cam1", label: "Camera 1" },
+      { id: "cam2_main", frigateId: "cam2", label: "Camera 2" },
+      { id: "cam3_main", frigateId: "cam3", label: "Camera 3" },
+      { id: "cam4_main", frigateId: "cam4", label: "Camera 4" },
+      { id: "cam5_main", frigateId: "cam5", label: "Camera 5" },
+      { id: "cam6_main", frigateId: "cam6", label: "Camera 6" },
+      { id: "cam7_main", frigateId: "cam7", label: "Camera 7" },
+      { id: "cam8_main", frigateId: "cam8", label: "Camera 8" },
     ];
 
     // ── Clock ──────────────────────────────────────────────────────────────
@@ -479,7 +483,7 @@
           const total    = CAMERAS.length;
           let online     = 0;
           CAMERAS.forEach(cam => {
-            const cs = camStats[cam.id];
+            const cs = camStats[cam.frigateId || cam.id];
             const isOnline = cs && (cs.camera_fps > 0 || cs.process_fps > 0);
             if (isOnline) online++;
             const el = document.getElementById("status-" + cam.id);

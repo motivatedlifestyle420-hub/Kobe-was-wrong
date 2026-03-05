@@ -1,240 +1,142 @@
-# Frigate NVR configuration – Tapo NVR Stack
+# Frigate NVR configuration – Tapo NVR Stack (8 cameras)
 #
 # Full reference: https://docs.frigate.video/configuration/
 #
-# Streams come from go2rtc (RTSP re-stream on go2rtc:8554 via Docker DNS).
-# Replace placeholder IPs, zones, and recording preferences below.
+# Detection uses substreams (cam*_sub via go2rtc:8554) for low CPU load.
+# Recording uses main streams (cam*_main via go2rtc:8554) for full quality.
+# Resource estimate: ~15–25% CPU, ~2–3 GB RAM, ~150–250 GB/week (motion).
 
 mqtt:
-  enabled: true
-  host: mosquitto          # Docker service name resolves via internal DNS
-  port: 1883
-  topic_prefix: frigate
-  client_id: frigate
+  host: mosquitto
   user: "${MQTT_USER}"
   password: "${MQTT_PASSWORD}"
+  topic_prefix: frigate
 
 # ── Detectors ────────────────────────────────────────────────────────────────
-# Choose ONE detector block. CPU is the zero-config default.
-# Coral USB or GPU delivers ~5-10× faster inference.
-
 detectors:
-  # ── CPU (default, no extra hardware needed) ─────────────────────────────
   cpu1:
     type: cpu
-    num_threads: 3
-
   # ── Google Coral USB (uncomment + comment out cpu1) ──────────────────────
   # coral:
   #   type: edgetpu
   #   device: usb
-
   # ── NVIDIA GPU / Jetson (uncomment + comment out cpu1) ───────────────────
   # tensorrt:
   #   type: tensorrt
   #   device: 0
 
-# ── Model (default YOLOv8n bundled with Frigate) ─────────────────────────────
-model:
-  width: 320
-  height: 320
-
-# ── Global camera defaults ───────────────────────────────────────────────────
-camera_groups:
-  all_cameras:
-    icon: camera
-    cameras:
-      - front_door
-      - back_yard
-      - driveway
-      - garage
-
-# ── Global object detection defaults ─────────────────────────────────────────
-objects:
-  track:
-    - person
-    - car
-    - dog
-    - cat
-  filters:
-    person:
-      min_area: 5000        # ignore tiny false-positive blobs
-      max_area: 100000
-      min_score: 0.5
-      threshold: 0.7
-    car:
-      min_area: 10000
-      min_score: 0.5
-      threshold: 0.7
-
 # ── Global recording defaults ─────────────────────────────────────────────────
 record:
   enabled: true
   retain:
-    days: 7                 # keep continuous footage for 7 days
-    mode: motion            # only keep segments with motion (saves disk)
-  events:
-    retain:
-      default: 30           # keep event clips for 30 days
-      mode: active_objects
+    days: 7
+    mode: motion
 
 # ── Global snapshot defaults ─────────────────────────────────────────────────
 snapshots:
   enabled: true
-  timestamp: true
-  bounding_box: true
   retain:
-    default: 30             # days
+    default: 14
 
-# ── Motion detection defaults ─────────────────────────────────────────────────
-motion:
-  threshold: 30
-  lightning_threshold: 0.8  # suppress false detections during lightning
+# ── Tracked objects ──────────────────────────────────────────────────────────
+objects:
+  track: [person, car, dog, cat]
+
+# ── FFmpeg output preset for recordings ──────────────────────────────────────
+ffmpeg:
+  output_args:
+    record: preset-record-generic-audio-copy
 
 # ── Cameras ──────────────────────────────────────────────────────────────────
-# go2rtc re-streams are available at rtsp://go2rtc:8554/<stream_name>
+# Detect on the low-res substream; record in full quality from the main stream.
+# Edit the labels to match your real camera locations once deployed.
 
 cameras:
 
-  front_door:
-    enabled: true
+  cam1:
     ffmpeg:
       inputs:
-        - path: rtsp://go2rtc:8554/front_door
-          roles:
-            - record
-        - path: rtsp://go2rtc:8554/front_door_sub
-          roles:
-            - detect
-      output_args:
-        record: preset-record-generic-audio-copy
-    detect:
-      enabled: true
-      width: 640
-      height: 360
-      fps: 5
-    zones:
-      doorstep:
-        coordinates: 0.25,0.75,0.75,0.75,0.75,1.0,0.25,1.0   # bottom quarter
-        objects:
-          - person
-      driveway_view:
-        coordinates: 0.0,0.0,1.0,0.0,1.0,0.5,0.0,0.5          # top half
-        objects:
-          - car
-    objects:
-      filters:
-        person:
-          required_zones:
-            - doorstep
-    snapshots:
-      enabled: true
-      required_zones:
-        - doorstep
-    record:
-      enabled: true
-    motion:
-      mask:
-        - 0,0,0.1,0,0.1,0.15,0,0.15   # mask out timestamp overlay (top-left)
+        - path: rtsp://go2rtc:8554/cam1_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://go2rtc:8554/cam1_main
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect: { width: 640, height: 360, fps: 5 }
 
-  back_yard:
-    enabled: true
+  cam2:
     ffmpeg:
       inputs:
-        - path: rtsp://go2rtc:8554/back_yard
-          roles:
-            - record
-        - path: rtsp://go2rtc:8554/back_yard_sub
-          roles:
-            - detect
-      output_args:
-        record: preset-record-generic-audio-copy
-    detect:
-      enabled: true
-      width: 640
-      height: 360
-      fps: 5
-    zones:
-      yard:
-        coordinates: 0.1,0.2,0.9,0.2,0.9,0.9,0.1,0.9
-        objects:
-          - person
-          - dog
-          - cat
-    motion:
-      mask:
-        - 0,0,0.1,0,0.1,0.15,0,0.15
+        - path: rtsp://go2rtc:8554/cam2_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://go2rtc:8554/cam2_main
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect: { width: 640, height: 360, fps: 5 }
 
-  driveway:
-    enabled: true
+  cam3:
     ffmpeg:
       inputs:
-        - path: rtsp://go2rtc:8554/driveway
-          roles:
-            - record
-        - path: rtsp://go2rtc:8554/driveway_sub
-          roles:
-            - detect
-      output_args:
-        record: preset-record-generic-audio-copy
-    detect:
-      enabled: true
-      width: 640
-      height: 360
-      fps: 5
-    zones:
-      driveway_zone:
-        coordinates: 0.0,0.3,1.0,0.3,1.0,1.0,0.0,1.0
-        objects:
-          - person
-          - car
-    motion:
-      mask:
-        - 0,0,0.1,0,0.1,0.15,0,0.15
+        - path: rtsp://go2rtc:8554/cam3_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://go2rtc:8554/cam3_main
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect: { width: 640, height: 360, fps: 5 }
 
-  garage:
-    enabled: true
+  cam4:
     ffmpeg:
       inputs:
-        - path: rtsp://go2rtc:8554/garage
-          roles:
-            - record
-        - path: rtsp://go2rtc:8554/garage_sub
-          roles:
-            - detect
-      output_args:
-        record: preset-record-generic-audio-copy
-    detect:
-      enabled: true
-      width: 640
-      height: 360
-      fps: 5
-    zones:
-      garage_entrance:
-        coordinates: 0.2,0.4,0.8,0.4,0.8,1.0,0.2,1.0
-        objects:
-          - person
-          - car
-    motion:
-      mask:
-        - 0,0,0.1,0,0.1,0.15,0,0.15
+        - path: rtsp://go2rtc:8554/cam4_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://go2rtc:8554/cam4_main
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect: { width: 640, height: 360, fps: 5 }
 
-# ── Alerts / notifications via MQTT ──────────────────────────────────────────
-# Frigate publishes every detection event to:
-#   frigate/events          – full event JSON
-#   frigate/<camera>/person – filtered by object type
-#
-# Wire up Home Assistant, Node-RED, or ntfy to the MQTT broker to send
-# push notifications.  See README.md for examples.
+  cam5:
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/cam5_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://go2rtc:8554/cam5_main
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect: { width: 640, height: 360, fps: 5 }
 
-# ── Health monitoring ─────────────────────────────────────────────────────────
-# Frigate marks cameras "offline" when FFmpeg loses the stream and publishes:
-#   frigate/<camera>/recordings/state  →  "offline" / "online"
-# Subscribe in Home Assistant / Node-RED to trigger "camera offline" alerts.
+  cam6:
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/cam6_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://go2rtc:8554/cam6_main
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect: { width: 640, height: 360, fps: 5 }
 
-# ── Storage ───────────────────────────────────────────────────────────────────
-# Media is stored in the Docker volume `frigate_media` → /media/frigate
-# Layout:
-#   /media/frigate/recordings/<camera>/<YYYY-MM>/<DD>/<HH>/<MM.SS.mp4>
-#   /media/frigate/clips/<camera>-<timestamp>-<label>.mp4
-#   /media/frigate/snapshots/<camera>-<timestamp>-<label>.jpg
+  cam7:
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/cam7_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://go2rtc:8554/cam7_main
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect: { width: 640, height: 360, fps: 5 }
+
+  cam8:
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/cam8_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://go2rtc:8554/cam8_main
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect: { width: 640, height: 360, fps: 5 }
