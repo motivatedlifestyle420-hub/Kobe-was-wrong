@@ -21,7 +21,6 @@ import pytest
 
 from rax_core.app import jobs
 from rax_core.app.db import get_conn, close_conn
-from rax_core.app.models import init_db
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +258,7 @@ class TestFail:
         job = _claim(db)
         jobs.fail(job["id"], job["worker_id"], job["lease_id"], db_path=db)
         updated = jobs.get_job(job["id"], db_path=db)
-        # run_at must be >= now (backoff added) — with jitter it could be 0..4 s
+        # run_at must be >= now (backoff added) — with jitter it could be 0..2 s
         assert updated["run_at"] >= before
 
     def test_wrong_lease_rejected(self, db):
@@ -359,16 +358,34 @@ class TestRequeueStale:
 
 class TestJobEvents:
     def test_events_are_append_only(self, db):
-        """Events must never be updated or deleted."""
+        """Database triggers must prevent UPDATE or DELETE of job_events rows."""
         jid = _enqueue(db)
         job = _claim(db)
         jobs.succeed(job["id"], job["worker_id"], job["lease_id"], db_path=db)
-        events_before = jobs.get_job_events(jid, db_path=db)
 
-        # Attempt to delete events — must not raise but rows must persist.
-        # (The constraint is in application code; we just verify state here.)
+        # Direct UPDATE of job_events must be rejected (append-only trigger).
+        conn = get_conn(db)
+        with pytest.raises(Exception):
+            conn.execute(
+                "UPDATE job_events SET event_type = 'mutated' WHERE job_id = ?",
+                (jid,),
+            )
+            conn.commit()
+        close_conn(conn)
+
+        # Direct DELETE of job_events must also be rejected (append-only trigger).
+        conn = get_conn(db)
+        with pytest.raises(Exception):
+            conn.execute(
+                "DELETE FROM job_events WHERE job_id = ?",
+                (jid,),
+            )
+            conn.commit()
+        close_conn(conn)
+
+        # Events must remain unchanged after failed mutation attempts.
         events_after = jobs.get_job_events(jid, db_path=db)
-        assert events_before == events_after
+        assert len(events_after) == 3  # enqueued, claimed, succeeded
 
     def test_full_lifecycle_event_sequence(self, db):
         jid = _enqueue(db)

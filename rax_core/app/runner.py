@@ -29,7 +29,13 @@ def _heartbeat_loop(
     db_path: Optional[str],
 ) -> None:
     """Send periodic heartbeats until stop_event is set."""
-    interval = config.get_heartbeat_timeout() / 3
+    heartbeat_timeout = config.get_heartbeat_timeout()
+    if heartbeat_timeout <= 0:
+        logger.warning(
+            "Invalid heartbeat timeout %r; using fallback value", heartbeat_timeout
+        )
+        heartbeat_timeout = 0.3
+    interval = max(heartbeat_timeout / 3, 0.1)
     while not stop_event.wait(interval):
         ok = jobs.heartbeat(job_id, worker_id, lease_id, db_path=db_path)
         if not ok:

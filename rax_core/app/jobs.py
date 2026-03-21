@@ -269,7 +269,10 @@ def fail(
 
     conn = get_conn(db_path)
     try:
-        # Read current counters while verifying ownership (within transaction).
+        # Read current counters to compute the new state.
+        # Ownership is re-verified by the UPDATE's WHERE clause below,
+        # which includes the heartbeat freshness check to prevent a stale
+        # lease from writing through after expiry.
         row = conn.execute(
             """
             SELECT attempts, max_attempts
@@ -305,13 +308,14 @@ def fail(
                 heartbeat_at = NULL,
                 run_at       = ?,
                 updated_at   = ?
-            WHERE id        = ?
-              AND state     = 'running'
-              AND worker_id = ?
-              AND lease_id  = ?
+            WHERE id          = ?
+              AND state       = 'running'
+              AND worker_id   = ?
+              AND lease_id    = ?
+              AND heartbeat_at >= ?
             """,
             (new_state, new_attempts, new_run_at, now,
-             job_id, worker_id, lease_id),
+             job_id, worker_id, lease_id, cutoff),
         )
         if res.rowcount != 1:
             conn.rollback()

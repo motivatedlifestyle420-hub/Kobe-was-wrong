@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, Depends, HTTPException, Header
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from rax_core.app import config
 from rax_core.app.models import init_db
@@ -59,7 +59,7 @@ _auth = Depends(_require_api_key)
 
 class EnqueueRequest(BaseModel):
     job_type: str
-    payload: Dict[str, Any] = {}
+    payload: Dict[str, Any] = Field(default_factory=dict)
     job_id: Optional[str] = None
     max_attempts: int = 3
     run_at: Optional[float] = None

@@ -6,10 +6,13 @@ Every connection applies the three mandatory PRAGMAs:
   - PRAGMA foreign_keys   — enforces referential integrity
   - PRAGMA journal_mode   — WAL for concurrent read/write safety
 """
+import logging
 import sqlite3
 from typing import Optional
 
 from rax_core.app import config
+
+logger = logging.getLogger(__name__)
 
 
 def get_conn(db_path: Optional[str] = None) -> sqlite3.Connection:
@@ -24,8 +27,8 @@ def get_conn(db_path: Optional[str] = None) -> sqlite3.Connection:
 
 
 def close_conn(conn: sqlite3.Connection) -> None:
-    """Close a connection, suppressing errors (used in finally blocks)."""
+    """Close a connection, logging any errors (used in finally blocks)."""
     try:
         conn.close()
     except Exception:
-        pass
+        logger.warning("Error closing SQLite connection", exc_info=True)

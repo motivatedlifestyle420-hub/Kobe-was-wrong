@@ -11,7 +11,12 @@ def get_db_path() -> str:
 
 
 def get_api_key() -> str:
-    return os.environ.get("RAX_API_KEY", "dev-secret")
+    try:
+        return os.environ["RAX_API_KEY"]
+    except KeyError:
+        raise RuntimeError(
+            "RAX_API_KEY environment variable must be set for API authentication"
+        ) from None
 
 
 def get_heartbeat_timeout() -> int:

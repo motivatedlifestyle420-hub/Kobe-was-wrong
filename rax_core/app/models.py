@@ -40,6 +40,18 @@ CREATE TABLE IF NOT EXISTS job_events (
     payload    TEXT,
     created_at REAL    NOT NULL DEFAULT (unixepoch('now'))
 );
+
+CREATE TRIGGER IF NOT EXISTS job_events_no_update
+BEFORE UPDATE ON job_events
+BEGIN
+    SELECT RAISE(ABORT, 'job_events rows are append-only and cannot be updated');
+END;
+
+CREATE TRIGGER IF NOT EXISTS job_events_no_delete
+BEFORE DELETE ON job_events
+BEGIN
+    SELECT RAISE(ABORT, 'job_events rows are append-only and cannot be deleted');
+END;
 """
 
 
