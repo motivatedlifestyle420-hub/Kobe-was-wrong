@@ -36,6 +36,7 @@ class _Collector(HTMLParser):
     def handle_endtag(self, tag):
         if tag == "title":
             self._in_title = False
+            self.title_text = self.title_text.strip()
         if tag == "button":
             self._in_button = False
             self.button_texts.append("".join(self._current_button).strip())
