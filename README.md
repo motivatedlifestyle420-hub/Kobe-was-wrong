@@ -13,7 +13,7 @@ This repository contains the configuration and infrastructure needed to run the 
 
 ---
 
-# Architecture
+## Architecture
 
 Cameras → go2rtc → Frigate → MQTT → Dashboard / Automation
 
@@ -33,7 +33,7 @@ Browser-based camera wall.
 
 ---
 
-# Services
+## Services
 
 | Service    | Purpose                   | Port |
 | ---------- | ------------------------- | ---- |
@@ -44,7 +44,7 @@ Browser-based camera wall.
 
 ---
 
-# System Requirements
+## System Requirements
 
 Recommended hardware:
 
@@ -64,7 +64,7 @@ GPU acceleration optional.
 
 ---
 
-# Installation
+## Installation
 
 Clone the repository.
 
@@ -87,7 +87,7 @@ docker compose ps
 
 ---
 
-# Access Interfaces
+## Access Interfaces
 
 Frigate UI
 
@@ -109,7 +109,7 @@ localhost:1883
 
 ---
 
-# Repository Structure
+## Repository Structure
 
 ```
 config/
@@ -128,7 +128,7 @@ README.md
 
 ---
 
-# MQTT Topics
+## MQTT Topics
 
 Frigate publishes events to MQTT.
 
@@ -144,7 +144,7 @@ These can be consumed by automation systems.
 
 ---
 
-# Maintenance
+## Maintenance
 
 View logs:
 
@@ -168,7 +168,7 @@ docker compose down
 
 ---
 
-# Security Notes
+## Security Notes
 
 Do not expose the MQTT broker publicly.
 Bind Mosquitto to localhost or restrict via firewall.
@@ -177,7 +177,7 @@ Credentials should be stored using environment variables, not hardcoded in confi
 
 ---
 
-# Future Improvements
+## Future Improvements
 
 Hardware acceleration (GPU / Coral TPU)
 Event notification system
@@ -187,6 +187,6 @@ Automated backup of recordings
 
 ---
 
-# License
+## License
 
 Private internal project.
