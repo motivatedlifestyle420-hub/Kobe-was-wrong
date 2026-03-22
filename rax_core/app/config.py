@@ -21,7 +21,14 @@ def get_api_key() -> str:
 
 def get_heartbeat_timeout() -> int:
     """Seconds before a running job is considered stale."""
-    return int(os.environ.get("RAX_HEARTBEAT_TIMEOUT", "60"))
+    raw_value = os.environ.get("RAX_HEARTBEAT_TIMEOUT", "60")
+    timeout = int(raw_value)
+    if timeout <= 0:
+        raise RuntimeError(
+            "RAX_HEARTBEAT_TIMEOUT must be a positive integer number of seconds "
+            f"(got {raw_value!r})"
+        )
+    return timeout
 
 
 def get_poll_interval() -> float:
