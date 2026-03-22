@@ -27,5 +27,5 @@ jobs:
           # Optional: install your project deps if you have them
           if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
 
-      - name: Run tests
-        run: python -m pytest
+            - name: Run tests
+              run: python -m pytest tests -v
