@@ -31,6 +31,13 @@ CREATE TABLE IF NOT EXISTS jobs (
     updated_at   REAL    NOT NULL DEFAULT (unixepoch('now'))
 );
 
+CREATE INDEX IF NOT EXISTS idx_jobs_pending_run_at_created_at
+    ON jobs (run_at, created_at)
+    WHERE state = 'pending';
+
+CREATE INDEX IF NOT EXISTS idx_jobs_running_heartbeat_at
+    ON jobs (heartbeat_at)
+    WHERE state = 'running';
 CREATE TABLE IF NOT EXISTS job_events (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     job_id     TEXT    NOT NULL REFERENCES jobs(id),
