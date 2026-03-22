@@ -21,11 +21,18 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest
+          python -m pip install --upgrade pip
+          python -m pip install pytest
 
           # Optional: install your project deps if you have them
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+
+      - name: Check for test files
+        run: |
+          if [ -z "$(find . -name 'test_*.py' -o -name '*_test.py' | head -1)" ]; then
+            echo "Error: No test files found matching patterns 'test_*.py' or '*_test.py'."
+            exit 1
+          fi
 
       - name: Run tests
-        if: ${{ hashFiles('**/test_*.py', '**/*_test.py') != '' }}
-        run: pytest
+        run: python -m pytest
