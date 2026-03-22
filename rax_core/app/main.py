@@ -32,10 +32,24 @@ async def lifespan(app: FastAPI):
     """Initialise DB and start background worker on startup."""
     init_db()
     worker_id = f"worker-{uuid.uuid4().hex[:8]}"
-    t = threading.Thread(target=run_worker, kwargs={"worker_id": worker_id}, daemon=True)
+    stop_event = threading.Event()
+    t = threading.Thread(
+        target=run_worker,
+        kwargs={"worker_id": worker_id, "stop_event": stop_event},
+        daemon=True,
+    )
     t.start()
     logger.info("Background worker %s started", worker_id)
-    yield
+    try:
+        yield
+    finally:
+        logger.info("Shutting down background worker %s", worker_id)
+        stop_event.set()
+        t.join(timeout=10)
+        if t.is_alive():
+            logger.warning(
+                "Background worker %s did not shut down within timeout", worker_id
+            )
 
 
 app = FastAPI(title="rax_core", version="1.0.0", lifespan=lifespan)

@@ -73,6 +73,6 @@ python -m pytest rax_core/tests/ -v
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `RAX_DB_PATH` | `rax_core/data/rax_core.db` | SQLite database path |
-| `RAX_API_KEY` | `dev-secret` | API authentication key |
+| `RAX_API_KEY` | _(required)_ | API authentication key (no default; must be set) |
 | `RAX_HEARTBEAT_TIMEOUT` | `60` | Seconds before a job is stale |
 | `RAX_POLL_INTERVAL` | `1.0` | Seconds between claim attempts |
