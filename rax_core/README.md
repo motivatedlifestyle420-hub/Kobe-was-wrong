@@ -41,15 +41,14 @@ rax_core/
 
 ## Canonical job states
 
-| State       | Meaning                         |
-|-------------|---------------------------------|
-| `pending`   | queued, waiting to be claimed   |
-| `running`   | actively executing              |
-| `succeeded` | finished successfully           |
-| `failed`    | execution error, will be retried |
-| `dead`      | exceeded max retry attempts     |
+| State       | Meaning                       |
+|-------------|-------------------------------|
+| `pending`   | queued, waiting to be claimed |
+| `running`   | actively executing            |
+| `succeeded` | finished successfully         |
+| `dead`      | exceeded max retry attempts   |
 
-Enforced by a SQLite `CHECK` constraint — no other states are possible.
+Enforced by a SQLite `CHECK` constraint — only the states above are possible.
 
 ---
 
@@ -109,17 +108,17 @@ curl -s "http://localhost:8080/jobs?state=pending"
 
 ## Configuration (env vars)
 
-| Variable                  | Default        | Description                              |
-|---------------------------|----------------|------------------------------------------|
-| `RAX_DB_PATH`             | `rax_core.db`  | SQLite file path                         |
-| `RAX_DB_BUSY_TIMEOUT_MS`  | `5000`         | SQLite busy-timeout (ms)                 |
-| `RAX_WORKER_ID`           | hostname       | Identity of this worker process          |
-| `RAX_HEARTBEAT_INTERVAL`  | `10`           | Seconds between heartbeat renewals       |
-| `RAX_HEARTBEAT_TIMEOUT`   | `60`           | Seconds before a running job is stale    |
-| `RAX_MAX_ATTEMPTS`        | `3`            | Max retries before moving to `dead`      |
-| `RAX_BACKOFF_BASE`        | `2`            | Exponential-backoff base (seconds)       |
-| `RAX_BACKOFF_CAP`         | `60`           | Maximum backoff delay (seconds)          |
-| `RAX_PORT`                | `8080`         | HTTP server port                         |
+| Variable                  | Default           | Description                              |
+|---------------------------|-------------------|------------------------------------------|
+| `RAX_DB_PATH`             | `data/rax_core.db`| SQLite file path                         |
+| `RAX_DB_BUSY_TIMEOUT_MS`  | `5000`            | SQLite busy-timeout (ms)                 |
+| `RAX_WORKER_ID`           | hostname          | Identity of this worker process          |
+| `RAX_HEARTBEAT_INTERVAL`  | `10`              | Seconds between heartbeat renewals       |
+| `RAX_HEARTBEAT_TIMEOUT`   | `60`              | Seconds before a running job is stale    |
+| `RAX_MAX_ATTEMPTS`        | `3`               | Max retries before moving to `dead`      |
+| `RAX_BACKOFF_BASE`        | `2`               | Exponential-backoff base (seconds)       |
+| `RAX_BACKOFF_CAP`         | `60`              | Maximum backoff delay (seconds)          |
+| `RAX_PORT`                | `8080`            | HTTP server port                         |
 
 ---
 

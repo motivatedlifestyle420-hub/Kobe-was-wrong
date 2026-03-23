@@ -6,7 +6,6 @@ Endpoints
 POST   /jobs                 Enqueue a new job
 GET    /jobs                 List jobs (optional ?state= filter)
 GET    /jobs/{job_id}        Get a single job
-POST   /jobs/{job_id}/claim  Manually claim a job (for testing / external runners)
 
 All responses are JSON.
 """
@@ -70,12 +69,14 @@ class RaxRequestHandler(BaseHTTPRequestHandler):
             if missing:
                 _json_response(self, 400, {"error": f"missing fields: {missing}"})
                 return
-            job = job_store.enqueue(
-                job_type=body["job_type"],
-                payload=body["payload"],
-                idempotency_key=body["idempotency_key"],
-                max_attempts=body.get("max_attempts", 3),
-            )
+            enqueue_kwargs = {
+                "job_type": body["job_type"],
+                "payload": body["payload"],
+                "idempotency_key": body["idempotency_key"],
+            }
+            if "max_attempts" in body:
+                enqueue_kwargs["max_attempts"] = body["max_attempts"]
+            job = job_store.enqueue(**enqueue_kwargs)
             _json_response(self, 200, job.as_dict() if job else {})
 
         else:

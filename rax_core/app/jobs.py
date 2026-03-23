@@ -7,7 +7,7 @@ Responsibilities:
   - heartbeat        : renew heartbeat_at for a running job
   - verify_ownership : confirm this worker still owns a running job (freshness check)
   - succeed          : mark running → succeeded (ownership verified)
-  - fail             : mark running → failed/dead with exponential backoff (ownership verified)
+  - fail             : on error, log failure and either requeue (running → pending with exponential backoff) or mark dead when attempts are exhausted (ownership verified)
   - get              : fetch a single job by id
   - list_jobs        : list jobs optionally filtered by state
   - requeue_stale    : reclaim orphaned running jobs whose heartbeat has expired
@@ -58,7 +58,8 @@ def enqueue(
         )
         c.commit()
     except sqlite3.IntegrityError:
-        pass  # duplicate idempotency key — not an error
+        # duplicate idempotency key — not an error, but ensure transaction is closed
+        c.rollback()
     row = c.execute(
         "SELECT * FROM jobs WHERE idempotency_key = ?", (idempotency_key,)
     ).fetchone()
@@ -186,15 +187,17 @@ def fail(
     conn: sqlite3.Connection | None = None,
 ) -> bool:
     """
-    Mark a running job as failed or dead.
-    - Increments attempts.
-    - If attempts >= max_attempts → state = 'dead'.
-    - Otherwise              → state = 'pending', schedules run_after with
-                               exponential backoff so claim() can pick it up
-                               again.  (claim() only picks pending rows, so
-                               retryable jobs must return to pending, not
-                               'failed', to actually be retried.)
-    Verifies ownership before any change.
+    Mark a running job as either scheduled for retry or dead.
+
+    State transitions (after verifying ownership):
+      - Always increments attempts.
+      - If attempts >= max_attempts → state changes from 'running' to 'dead'.
+      - Otherwise                   → state changes from 'running' to
+        'pending', and run_after is set using exponential backoff so
+        claim() can pick it up for a retry.
+
+    A FAILED event is logged for observability, but the persistent job.state
+    after this call is only ever 'pending' (retryable) or 'dead' (exhausted).
     """
     c = conn or get_conn()
     now = time.time()
