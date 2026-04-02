@@ -1,0 +1,30 @@
+name: tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install pytest
+
+      - name: Run pytest (allow no tests collected)
+        run: |
+          set -e
+          pytest || code=$?
+          if [ "${code:-0}" -eq 5 ]; then
+            echo "pytest: no tests collected (exit code 5); treating as success."
+            exit 0
+          elif [ "${code:-0}" -ne 0 ]; then
+            exit "${code}"
+          fi
